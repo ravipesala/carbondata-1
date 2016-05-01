@@ -26,6 +26,7 @@ import org.apache.spark.sql.cubemodel.tableModel
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types.{BooleanType, StringType, TimestampType}
+
 import org.carbondata.integration.spark.agg._
 import org.carbondata.integration.spark.cache.QueryPredicateTempCache
 
@@ -302,10 +303,10 @@ object PhysicalOperation1 extends PredicateHelper {
     relation
   }
 
-  def transformPlan(plan: LogicalPlan) = {
+  def transformPlan(plan: LogicalPlan): LogicalPlan = {
     plan.transform {
       case Filter(condition, child) =>
-        val d =condition.transform {
+        val d = condition.transform {
           case Literal(name, dataType) =>
             Literal.create(QueryPredicateTempCache.instance.getSurrogate(name.toString), dataType)
         }

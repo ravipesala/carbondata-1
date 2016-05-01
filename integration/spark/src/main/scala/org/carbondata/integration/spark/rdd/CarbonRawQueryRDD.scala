@@ -24,6 +24,7 @@ import java.util.Date
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
+
 import org.carbondata.common.logging.LogServiceFactory
 import org.carbondata.core.carbon.datastore.block.TableBlockInfo
 import org.carbondata.core.iterator.CarbonIterator
@@ -34,8 +35,19 @@ import org.carbondata.query.carbon.model.QueryModel
 import org.carbondata.query.expression.Expression
 
 
-/**
-  * This RDD is used to perform query.
+ /**
+  * This RDD is used to perform query with raw data, it means it doesn't convert dictionary values
+  * to actual data.
+  * @param sc
+  * @param queryModel
+  * @param filterExpression
+  * @param keyClass
+  * @param conf
+  * @param cubeCreationTime
+  * @param schemaLastUpdatedTime
+  * @param baseStoreLocation
+  * @tparam K
+  * @tparam V
   */
 class CarbonRawQueryRDD[K, V](
                                sc: SparkContext,

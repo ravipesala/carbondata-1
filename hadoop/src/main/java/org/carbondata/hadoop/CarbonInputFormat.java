@@ -308,7 +308,7 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
 
   public static void setCarbonReadSupport(Class<? extends CarbonReadSupport> readSupportClass,
       Configuration configuration) {
-    if(readSupportClass != null) {
+    if (readSupportClass != null) {
       configuration.set(CARBON_READ_SUPPORT, readSupportClass.getName());
     }
   }
@@ -438,15 +438,15 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
     String readSupportClass = taskAttemptContext.getConfiguration().get(CARBON_READ_SUPPORT);
     //By default it uses dictionary decoder read class
     CarbonReadSupport readSupport = new DictionaryDecodeReadSupport();
-    if(readSupportClass != null) {
+    if (readSupportClass != null) {
       try {
         Class<?> myClass = Class.forName(readSupportClass);
         Constructor<?> constructor = myClass.getConstructors()[0];
-        readSupport = (CarbonReadSupport)constructor.newInstance();
+        readSupport = (CarbonReadSupport) constructor.newInstance();
       } catch (ClassNotFoundException ex) {
-        LOG.error("Class "+readSupportClass +"not found", ex);
+        LOG.error("Class " + readSupportClass + "not found", ex);
       } catch (Exception ex) {
-        LOG.error("Error while creating "+readSupportClass, ex);
+        LOG.error("Error while creating " + readSupportClass, ex);
       }
     }
     return readSupport;
