@@ -24,7 +24,8 @@ import org.carbondata.spark.exception.MalformedCarbonCommandException
 
 private[sql] object CarbonStrategy {
   def getStrategy(context: SQLContext): Strategy = {
-    new CarbonStrategies(context).CarbonCubeScans
+//    new CarbonStrategies(context).CarbonCubeScans
+    new CarbonRawStrategies(context).CarbonRawCubeScans
   }
 }
 

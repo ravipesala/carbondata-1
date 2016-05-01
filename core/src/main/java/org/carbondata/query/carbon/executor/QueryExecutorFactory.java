@@ -23,6 +23,7 @@ import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.query.carbon.executor.impl.AggregationQueryExecutor;
 import org.carbondata.query.carbon.executor.impl.CountStarQueryExecutor;
 import org.carbondata.query.carbon.executor.impl.DetailQueryExecutor;
+import org.carbondata.query.carbon.executor.impl.DetailRawRecordQueryExcecutor;
 import org.carbondata.query.carbon.executor.impl.DetailWithOrderByQueryExecutor;
 import org.carbondata.query.carbon.executor.impl.FunctionQueryExecutor;
 import org.carbondata.query.carbon.model.QueryModel;
@@ -60,7 +61,7 @@ public class QueryExecutorFactory {
       return new FunctionQueryExecutor();
     }
     // if not a detail query then it is a aggregation query
-    else if (!queryModel.isDetailQuery()) {
+    else if (!queryModel.isDetailQuery() && !queryModel.isForcedDetailRawQuery()) {
       LOGGER.info("Aggergation query: ");
       return new AggregationQueryExecutor();
     }
@@ -68,6 +69,8 @@ public class QueryExecutorFactory {
     else if (queryModel.isDetailQuery() && queryModel.getSortDimension().size() > 0) {
       LOGGER.info("Detail with order by query: ");
       return new DetailWithOrderByQueryExecutor();
+    } else if (queryModel.isForcedDetailRawQuery()) {
+      return new DetailRawRecordQueryExcecutor();
     } else {
       // detail query
       LOGGER.info("Detail query: ");

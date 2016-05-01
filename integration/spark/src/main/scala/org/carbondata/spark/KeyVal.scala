@@ -37,6 +37,15 @@ class KeyValImpl extends KeyVal[CarbonKey, CarbonValue] {
   override def getKey(key: CarbonKey, value: CarbonValue): (CarbonKey, CarbonValue) = (key, value)
 }
 
+trait RawKeyVal[K, V] extends Serializable {
+  def getKey(key: Array[Object], value: Any): (K, V)
+
+}
+
+class RawKeyValImpl extends RawKeyVal[Array[Object], Any] {
+  override def getKey(key: Array[Object], value: Any): (Array[Object], Any) = (key, value)
+}
+
 trait Result[K, V] extends Serializable {
   def getKey(key: Int, value: LoadMetadataDetails): (K, V)
 

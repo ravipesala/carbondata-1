@@ -81,7 +81,7 @@ class CarbonQueryRDD[K, V](
       var filterResolver: FilterResolverIntf = null
       if (filterExpression != null) {
         // set filter resolver tree
-        filterResolver = carbonInputFormat.getResolvedFilter(job, filterExpression)
+        filterResolver = carbonInputFormat.getResolvedFilter(job.getConfiguration, filterExpression)
         queryModel.setFilterExpressionResolverTree(filterResolver)
       }
       // get splits
@@ -159,6 +159,7 @@ class CarbonQueryRDD[K, V](
           }
           // execute query
           rowIterator = QueryExecutorFactory.getQueryExecutor(queryModel).execute(queryModel)
+            .asInstanceOf[CarbonIterator[RowResult]]
         }
         // TODO
         // : CarbonQueryUtil.isQuickFilter quick filter from dictionary needs to support
