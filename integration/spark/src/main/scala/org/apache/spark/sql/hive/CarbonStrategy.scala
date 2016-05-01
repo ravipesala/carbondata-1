@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{CarbonSqlParser, SQLContext, Strategy}
+import org.apache.spark.sql.{CarbonSqlParser, CarbonContext, SQLContext, Strategy}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 private[sql] object CarbonStrategy {
   def getStrategy(context: SQLContext): Strategy = {
-//    new CarbonStrategies(context).CarbonCubeScans
-    new CarbonRawStrategies(context).CarbonRawCubeScans
+    if (context.asInstanceOf[CarbonContext].pushaggregation) {
+      new CarbonStrategies(context).CarbonCubeScans
+    } else {
+      // TODO: need to remove duplicate code in strategies.
+      new CarbonRawStrategies(context).CarbonRawCubeScans
+    }
   }
 }
 
