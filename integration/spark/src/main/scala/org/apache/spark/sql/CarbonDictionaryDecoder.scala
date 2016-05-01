@@ -25,21 +25,20 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 import org.apache.spark.sql.hive.CarbonMetastoreCatalog
 import org.apache.spark.sql.types._
-import org.carbondata.core.cache.dictionary.{Dictionary, DictionaryColumnUniqueIdentifier}
+
 import org.carbondata.core.cache.{Cache, CacheProvider, CacheType}
+import org.carbondata.core.cache.dictionary.{Dictionary, DictionaryColumnUniqueIdentifier}
+import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier}
 import org.carbondata.core.carbon.metadata.datatype.DataType
 import org.carbondata.core.carbon.metadata.encoder.Encoding
-import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier}
 import org.carbondata.query.carbon.util.DataTypeUtil
 
-/**
-  * :: DeveloperApi ::
-  * Groups input data by `groupingExpressions` and computes the `aggregateExpressions` for each
-  * group.
-  *
-  * @param child the input data source.
+ /**
+  * It decodes the data.
+  * @param relation
+  * @param child
+  * @param sqlContext
   */
-@DeveloperApi
 case class CarbonDictionaryDecoder(relation: CarbonRelation,
                                    child: SparkPlan)
                                   (@transient sqlContext: SQLContext)
@@ -130,7 +129,8 @@ case class CarbonDictionaryDecoder(relation: CarbonRelation,
 
     }
   }
-  def getDictionary(ati: AbsoluteTableIdentifier,
+
+  private def getDictionary(ati: AbsoluteTableIdentifier,
                     cache: Cache[DictionaryColumnUniqueIdentifier, Dictionary]) = {
     val dicts: Seq[Dictionary] = getDictionaryColumnIds.map { f =>
       if (f._1 != null) {

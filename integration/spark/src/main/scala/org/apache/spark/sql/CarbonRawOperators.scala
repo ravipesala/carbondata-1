@@ -28,22 +28,21 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.LeafNode
 import org.apache.spark.sql.hive.CarbonMetastoreCatalog
-import org.apache.spark.sql.types.{BinaryType, IntegerType}
 import org.apache.spark.unsafe.types.UTF8String
-import org.carbondata.core.carbon.metadata.encoder.Encoding
+
 import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier}
 import org.carbondata.core.constants.CarbonCommonConstants
 import org.carbondata.core.util.CarbonProperties
+import org.carbondata.integration.spark.{RawKeyVal, RawKeyValImpl}
 import org.carbondata.integration.spark.cache.QueryPredicateTempCache
 import org.carbondata.integration.spark.query.CarbonQueryPlan
 import org.carbondata.integration.spark.query.metadata.{CarbonPlanDimension, CarbonPlanMeasure, SortOrderType}
 import org.carbondata.integration.spark.rdd.CarbonRawQueryRDD
 import org.carbondata.integration.spark.util.{CarbonQueryUtil, CarbonScalaUtil}
-import org.carbondata.integration.spark.{RawKeyVal, RawKeyValImpl}
+import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression, Expression => CarbonExpression, LiteralExpression => CarbonLiteralExpression}
 import org.carbondata.query.expression.arithmetic.{AddExpression, DivideExpression, MultiplyExpression, SubstractExpression}
 import org.carbondata.query.expression.conditional._
 import org.carbondata.query.expression.logical.{AndExpression, OrExpression}
-import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression, Expression => CarbonExpression, LiteralExpression => CarbonLiteralExpression}
 
 
 case class CarbonRawCubeScan(
@@ -212,20 +211,6 @@ case class CarbonRawCubeScan(
   }
 
   def output: Seq[Attribute] = {
-    /*val d = attributes
-    .map { attr =>
-      val carbonDimension = carbonTable.getDimensionByName(carbonTable.getFactTableName, attr.name);
-      if (carbonDimension != null && carbonDimension.getEncoder.contains(Encoding.DICTIONARY)) {
-        val d = attr.asInstanceOf[AttributeReference]
-        val a = AttributeReference(d.name, IntegerType, d.nullable, d.metadata)(d.exprId,
-          d.qualifiers).asInstanceOf[Attribute]
-        a.resolved
-        a
-      } else {
-        attr
-      }
-    }
-    d*/
     attributes
   }
 

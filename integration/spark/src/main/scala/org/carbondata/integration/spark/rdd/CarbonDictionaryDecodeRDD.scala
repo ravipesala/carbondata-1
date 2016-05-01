@@ -1,21 +1,39 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.carbondata.integration.spark.rdd
 
+import org.apache.spark.{Logging, Partition, TaskContext}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{PhysicalOperation1, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{PhysicalOperation1, Row}
-import org.apache.spark.{Logging, Partition, TaskContext}
-import org.carbondata.core.cache.dictionary.{Dictionary, DictionaryColumnUniqueIdentifier}
+
 import org.carbondata.core.cache.{Cache, CacheProvider, CacheType}
+import org.carbondata.core.cache.dictionary.{Dictionary, DictionaryColumnUniqueIdentifier}
+import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier}
 import org.carbondata.core.carbon.metadata.datatype.DataType
 import org.carbondata.core.carbon.metadata.encoder.Encoding
-import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier}
 import org.carbondata.integration.spark.util.CarbonScalaUtil
 import org.carbondata.query.carbon.util.DataTypeUtil
 
-/**
-  * Created by root1 on 29/4/16.
+ /**
+  * It decodes dictionary values to actual values.
   */
 class CarbonDictionaryDecodeRDD(prev: RDD[Row],
                                 plan: LogicalPlan,
@@ -29,8 +47,8 @@ class CarbonDictionaryDecodeRDD(prev: RDD[Row],
     val (_, _, _, aliases, _, _, _) =
       PhysicalOperation1.collectProjectsAndFilters(plan)
     aliases.map { a =>
-      val name  = a._2 match {
-        case attr:AttributeReference => attr.name
+      val name = a._2 match {
+        case attr: AttributeReference => attr.name
         case other => a._2.nodeName
       }
       (a._1.name, name)

@@ -24,10 +24,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, QueryPlanner}
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.cubemodel._
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, DescribeCommand =>
-LogicalDescribeCommand}
-import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand, _}
+import org.apache.spark.sql.execution.{Aggregate, DescribeCommand => RunnableDescribeCommand, ExecutedCommand, Project, SparkPlan}
+import org.apache.spark.sql.execution.datasources.{DescribeCommand => LogicalDescribeCommand}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
+
 import org.carbondata.common.logging.LogServiceFactory
 import org.carbondata.integration.spark.util.CarbonSparkInterFaceLogEvent
 
@@ -42,7 +43,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
     total
   }
 
-  /**
+   /**
     * Carbon strategies for Carbon cube scanning
     */
   private[sql] object CarbonRawCubeScans extends Strategy {
@@ -147,9 +148,6 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
       }
     }
 
-    /**
-      * Create carbon scan
-      */
     private def carbonScan(projectList: Seq[NamedExpression],
                            predicates: Seq[Expression],
                            relation: CarbonRelation,
