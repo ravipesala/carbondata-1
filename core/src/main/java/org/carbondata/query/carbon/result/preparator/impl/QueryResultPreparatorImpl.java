@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.carbondata.query.carbon.executor.impl;
+package org.carbondata.query.carbon.result.preparator.impl;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -32,12 +32,14 @@ import org.carbondata.query.aggregator.MeasureAggregator;
 import org.carbondata.query.aggregator.impl.CountAggregator;
 import org.carbondata.query.aggregator.impl.DistinctCountAggregator;
 import org.carbondata.query.aggregator.impl.DistinctStringCountAggregator;
+import org.carbondata.query.carbon.executor.impl.QueryExecutorProperties;
 import org.carbondata.query.carbon.model.DimensionAggregatorInfo;
 import org.carbondata.query.carbon.model.QueryDimension;
 import org.carbondata.query.carbon.model.QueryMeasure;
 import org.carbondata.query.carbon.model.QueryModel;
 import org.carbondata.query.carbon.result.BatchResult;
 import org.carbondata.query.carbon.result.Result;
+import org.carbondata.query.carbon.result.preparator.QueryResultPreparator;
 import org.carbondata.query.carbon.util.DataTypeUtil;
 import org.carbondata.query.carbon.wrappers.ByteArrayWrapper;
 import org.carbondata.query.scanner.impl.CarbonKey;
@@ -56,10 +58,10 @@ import org.carbondata.query.scanner.impl.CarbonValue;
  * for example its implementation case return converted result or directly result with out
  * converting to actual value
  */
-public class QueryResultPreparator {
+public class QueryResultPreparatorImpl implements QueryResultPreparator<BatchResult> {
 
   private static final LogService LOGGER =
-      LogServiceFactory.getLogService(QueryResultPreparator.class.getName());
+      LogServiceFactory.getLogService(QueryResultPreparatorImpl.class.getName());
 
   /**
    * query properties
@@ -71,12 +73,14 @@ public class QueryResultPreparator {
    */
   private QueryModel queryModel;
 
-  public QueryResultPreparator(QueryExecutorProperties executerProperties, QueryModel queryModel) {
+  public QueryResultPreparatorImpl(QueryExecutorProperties executerProperties,
+      QueryModel queryModel) {
     this.queryExecuterProperties = executerProperties;
     this.queryModel = queryModel;
   }
 
-  public BatchResult getQueryResult(Result scannedResult) {
+  @Override
+  public BatchResult prepareQueryResult(Result scannedResult) {
     if ((null == scannedResult || scannedResult.size() < 1)) {
       return new BatchResult();
     }

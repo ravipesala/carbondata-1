@@ -19,11 +19,11 @@ package org.carbondata.integration.spark.util
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{CarbonContext, CarbonEnv, CarbonRelation, SchemaRDD}
+import org.apache.spark.sql._
 import org.apache.spark.sql.cubemodel.Level
 import org.apache.spark.sql.hive.CarbonMetaData
 import org.apache.spark.sql.types._
-
+import org.carbondata.core.carbon.metadata.datatype.DataType
 import org.carbondata.core.carbon.metadata.schema.table.CarbonTable
 import org.carbondata.core.constants.CarbonCommonConstants
 import org.carbondata.query.expression.{DataType => CarbonDataType}
@@ -88,6 +88,18 @@ object CarbonScalaUtil {
       case CarbonCommonConstants.TIMESTAMP_TYPE => Seq(
         Level(field._1, field._1, Int.MaxValue, CarbonCommonConstants.TIMESTAMP))
     }
+
+  def convertCarbonToSparkDataType(dataType: DataType): types.DataType = {
+    dataType match {
+      case DataType.STRING => StringType
+      case DataType.INT => IntegerType
+      case DataType.LONG => LongType
+      case DataType.DOUBLE => DoubleType
+      case DataType.BOOLEAN => BooleanType
+      case DataType.DECIMAL => DecimalType.SYSTEM_DEFAULT
+      case DataType.TIMESTAMP => TimestampType
+    }
+  }
 
 
   case class TransformHolder(rdd: Any, mataData: CarbonMetaData)

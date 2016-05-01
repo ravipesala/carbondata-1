@@ -22,86 +22,50 @@ import java.text.SimpleDateFormat
 import java.util
 import java.util.Date
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.mapreduce.Job
-import org.apache.spark.{Logging, Partition, SerializableWritable, SparkContext, TaskContext}
-import org.apache.spark.rdd.RDD
-
+import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.carbondata.common.logging.LogServiceFactory
 import org.carbondata.core.carbon.datastore.block.TableBlockInfo
 import org.carbondata.core.iterator.CarbonIterator
-import org.carbondata.hadoop.{CarbonInputFormat, CarbonInputSplit}
-import org.carbondata.integration.spark.KeyVal
-import org.carbondata.integration.spark.util.QueryPlanUtil
+import org.carbondata.integration.spark.RawKeyVal
+import org.carbondata.integration.spark.util.CarbonSparkInterFaceLogEvent
 import org.carbondata.query.carbon.executor.QueryExecutorFactory
 import org.carbondata.query.carbon.model.QueryModel
-import org.carbondata.query.carbon.result.RowResult
 import org.carbondata.query.expression.Expression
-import org.carbondata.query.filter.resolver.FilterResolverIntf
 
 
-
-class CarbonSparkPartition(rddId: Int, val idx: Int,
-  @transient val carbonInputSplit: CarbonInputSplit)
-  extends Partition {
-
-  override val index: Int = idx
-  val serializableHadoopSplit = new SerializableWritable[CarbonInputSplit](carbonInputSplit)
-
-  override def hashCode(): Int = 41 * (41 + rddId) + idx
-}
-
-
- /**
+/**
   * This RDD is used to perform query.
   */
-  class CarbonQueryRDD[K, V](
-  sc: SparkContext,
-  queryModel: QueryModel,
-  filterExpression: Expression,
-  keyClass: KeyVal[K, V],
-  @transient conf: Configuration,
-  cubeCreationTime: Long,
-  schemaLastUpdatedTime: Long,
-  baseStoreLocation: String)
-  extends RDD[(K, V)](sc, Nil) with Logging {
+class CarbonRawQueryRDD[K, V](
+                               sc: SparkContext,
+                               queryModel: QueryModel,
+                               filterExpression: Expression,
+                               keyClass: RawKeyVal[K, V],
+                               @transient conf: Configuration,
+                               cubeCreationTime: Long,
+                               schemaLastUpdatedTime: Long,
+                               baseStoreLocation: String)
+  extends  CarbonQueryRDD[K, V](sc,
+                                queryModel,
+                                filterExpression,
+                                null,
+                                conf,
+                                cubeCreationTime,
+                                schemaLastUpdatedTime,
+                                baseStoreLocation) with Logging {
 
   private val jobtrackerId: String = {
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     formatter.format(new Date())
   }
 
-  override def getPartitions: Array[Partition] = {
-
-    val (carbonInputFormat: CarbonInputFormat[RowResult], job: Job) =
-      QueryPlanUtil.createCarbonInputFormat(queryModel.getAbsoluteTableIdentifier)
-
-    var filterResolver: FilterResolverIntf = null
-    if (filterExpression != null) {
-        // set filter resolver tree
-        filterResolver = carbonInputFormat.getResolvedFilter(job.getConfiguration, filterExpression)
-        queryModel.setFilterExpressionResolverTree(filterResolver)
-      }
-    // get splits
-    val splits = carbonInputFormat.getSplits(job, filterResolver);
-    val carbonInputSplits = splits.asScala.map(_.asInstanceOf[CarbonInputSplit])
-
-    val result = new Array[Partition](splits.size)
-    for (i <- 0 until result.length) {
-      result(i) = new CarbonSparkPartition(id, i, carbonInputSplits(i))
-    }
-    result
-  }
-
-
-   override def compute(thepartition: Partition, context: TaskContext): Iterator[(K, V)] = {
+  override def compute(thepartition: Partition, context: TaskContext): Iterator[(K, V)] = {
     val LOGGER = LogServiceFactory.getLogService(this.getClass().getName());
     val iter = new Iterator[(K, V)] {
-      var rowIterator: CarbonIterator[RowResult] = _
+      var rowIterator: CarbonIterator[Array[Object]] = _
       var queryStartTime: Long = 0
-      try {
+      try { {
         val carbonSparkPartition = thepartition.asInstanceOf[CarbonSparkPartition]
         val carbonInputSplit = carbonSparkPartition.serializableHadoopSplit.value
 
@@ -109,7 +73,9 @@ class CarbonSparkPartition(rddId: Int, val idx: Int,
         val tableBlockInfoList = new util.ArrayList[TableBlockInfo]();
         tableBlockInfoList.add(new TableBlockInfo(carbonInputSplit.getPath.toString,
           carbonInputSplit.getStart,
-          carbonInputSplit.getSegmentId, carbonInputSplit.getLocations, carbonInputSplit.getLength
+          carbonInputSplit.getSegmentId,
+          carbonInputSplit.getLocations,
+          carbonInputSplit.getLength
         )
         )
         queryModel.setTableBlockInfos(tableBlockInfoList)
@@ -119,16 +85,18 @@ class CarbonSparkPartition(rddId: Int, val idx: Int,
         logInfo("*************************" + carbonPropertiesFilePath)
         if (null == carbonPropertiesFilePath) {
           System.setProperty("carbon.properties.filepath", System.getProperty("user.dir")
-            + '/' + "conf" + '/' + "carbon.properties"
+                                                           + '/' + "conf" + '/' +
+                                                           "carbon.properties"
           );
         }
         // execute query
         rowIterator = QueryExecutorFactory.getQueryExecutor(queryModel).execute(queryModel)
-                      .asInstanceOf[CarbonIterator[RowResult]]
+                      .asInstanceOf[CarbonIterator[Array[Object]]]
+      }
         // TODO: CarbonQueryUtil.isQuickFilter quick filter from dictionary needs to support
       } catch {
         case e: Exception =>
-          LOGGER.error(e)
+          LOGGER.error(CarbonSparkInterFaceLogEvent.UNIBI_CARBON_SPARK_INTERFACE_MSG, e)
           // updateCubeAndLevelCacheStatus(levelCacheKeys)
           if (null != e.getMessage) {
             sys.error("Exception occurred in query execution :: " + e.getMessage)
@@ -145,9 +113,6 @@ class CarbonSparkPartition(rddId: Int, val idx: Int,
           finished = !rowIterator.hasNext()
           havePair = !finished
         }
-        if (finished) {
-          // updateCubeAndLevelCacheStatus(levelCacheKeys)
-        }
         !finished
       }
 
@@ -157,24 +122,13 @@ class CarbonSparkPartition(rddId: Int, val idx: Int,
         }
         havePair = false
         val row = rowIterator.next()
-        val key = row.getKey()
-        val value = row.getValue()
-        keyClass.getKey(key, value)
+        keyClass.getKey(row, null)
       }
 
       logInfo("*************************** Total Time Taken to execute the query in Carbon Side: " +
-        (System.currentTimeMillis - queryStartTime)
+              (System.currentTimeMillis - queryStartTime)
       )
     }
     iter
-  }
-
-
-   /**
-    * Get the preferred locations where to launch this task.
-    */
-  override def getPreferredLocations(partition: Partition): Seq[String] = {
-    val theSplit = partition.asInstanceOf[CarbonSparkPartition]
-    theSplit.serializableHadoopSplit.value.getLocations.filter(_ != "localhost")
   }
 }

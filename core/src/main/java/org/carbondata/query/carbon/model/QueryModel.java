@@ -117,6 +117,12 @@ public class QueryModel implements Serializable {
   private String queryTempLocation;
 
   /**
+   * To handle most of the computation in query engines like spark and hive, carbon should give
+   * raw detailed records to it.
+   */
+  private boolean forcedDetailRawQuery;
+
+  /**
    * paritition column list
    */
   private List<String> paritionColumns;
@@ -378,6 +384,14 @@ public class QueryModel implements Serializable {
    */
   public void setTable(CarbonTable table) {
     this.table = table;
+  }
+
+  public boolean isForcedDetailRawQuery() {
+    return forcedDetailRawQuery;
+  }
+
+  public void setForcedDetailRawQuery(boolean forcedDetailRawQuery) {
+    this.forcedDetailRawQuery = forcedDetailRawQuery;
   }
 
 }

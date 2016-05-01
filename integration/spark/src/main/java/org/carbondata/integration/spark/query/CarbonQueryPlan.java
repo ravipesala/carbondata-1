@@ -123,6 +123,12 @@ public class CarbonQueryPlan implements Serializable {
   private List<QueryDimension> sortedDimensions;
 
   /**
+   * If it is raw detail query, no need to aggregate in backend. And it reurns with dictionary data
+   * with out decoding.
+   */
+  private boolean rawDetailQuery;
+
+  /**
    * Constructor created with cube name.
    *
    * @param cubeName
@@ -270,5 +276,13 @@ public class CarbonQueryPlan implements Serializable {
 
   public void setSortedDimemsions(List<QueryDimension> dims) {
     this.sortedDimensions = dims;
+  }
+
+  public boolean isRawDetailQuery() {
+    return rawDetailQuery;
+  }
+
+  public void setRawDetailQuery(boolean rawDetailQuery) {
+    this.rawDetailQuery = rawDetailQuery;
   }
 }

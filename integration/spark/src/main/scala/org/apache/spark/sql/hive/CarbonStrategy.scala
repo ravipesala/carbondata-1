@@ -22,7 +22,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 private[sql] object CarbonStrategy {
   def getStrategy(context: SQLContext): Strategy = {
-    new CarbonStrategies(context).CarbonCubeScans
+//    new CarbonStrategies(context).CarbonCubeScans
+    new CarbonRawStrategies(context).CarbonRawCubeScans
   }
 }
 

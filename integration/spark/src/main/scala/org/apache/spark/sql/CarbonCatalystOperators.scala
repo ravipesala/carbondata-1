@@ -23,10 +23,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{UnaryNode, _}
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.cubemodel.tableModel
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types.{BooleanType, StringType, TimestampType}
-
 import org.carbondata.integration.spark.agg._
+import org.carbondata.integration.spark.cache.QueryPredicateTempCache
 
 /**
  * Top command
@@ -289,6 +290,29 @@ object PhysicalOperation1 extends PredicateHelper {
       case other =>
         (None, Nil, other, Map.empty, None, None, None)
     }
+
+  def collectRelation(plan: LogicalPlan): CarbonDatasourceRelation = {
+    var relation: CarbonDatasourceRelation = null
+    plan.collect {
+      case l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _) =>
+        relation = carbonRelation
+        l
+      case other => other
+    }
+    relation
+  }
+
+  def transformPlan(plan: LogicalPlan) = {
+    plan.transform {
+      case Filter(condition, child) =>
+        val d =condition.transform {
+          case Literal(name, dataType) =>
+            Literal.create(QueryPredicateTempCache.instance.getSurrogate(name.toString), dataType)
+        }
+        Filter(d, child)
+      case other => other
+    }
+  }
 
   private def collectAliases(fields: Seq[Expression]) = fields.collect {
     case a@Alias(child, _) => a.toAttribute.asInstanceOf[Attribute] -> child
