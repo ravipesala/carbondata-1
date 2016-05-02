@@ -28,6 +28,7 @@ import org.apache.spark.sql.hive._
 import org.carbondata.common.logging.LogServiceFactory
 import org.carbondata.core.util.CarbonProperties
 import org.carbondata.integration.spark.rdd.CarbonDataFrameRDD
+import org.carbondata.integration.spark.util.CarbonSparkInterFaceLogEvent
 
 class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveContext(sc) {
   self =>

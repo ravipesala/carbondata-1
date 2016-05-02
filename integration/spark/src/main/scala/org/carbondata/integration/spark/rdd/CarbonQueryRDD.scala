@@ -32,6 +32,7 @@ import org.apache.spark.rdd.RDD
 import org.carbondata.common.logging.LogServiceFactory
 import org.carbondata.core.carbon.datastore.block.TableBlockInfo
 import org.carbondata.core.iterator.CarbonIterator
+import org.carbondata.hadoop.util.CarbonInputFormatUtil
 import org.carbondata.hadoop.{CarbonInputFormat, CarbonInputSplit}
 import org.carbondata.integration.spark.KeyVal
 import org.carbondata.integration.spark.util.QueryPlanUtil

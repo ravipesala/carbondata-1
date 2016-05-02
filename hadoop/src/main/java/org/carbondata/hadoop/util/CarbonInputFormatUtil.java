@@ -5,17 +5,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.carbondata.core.carbon.AbsoluteTableIdentifier;
+import org.carbondata.core.carbon.datastore.exception.IndexBuilderException;
 import org.carbondata.core.carbon.metadata.schema.table.CarbonTable;
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonColumn;
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension;
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonMeasure;
 import org.carbondata.core.constants.CarbonCommonConstants;
+import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
 import org.carbondata.query.carbon.model.DimensionAggregatorInfo;
 import org.carbondata.query.carbon.model.QueryModel;
 import org.carbondata.query.directinterface.impl.CarbonQueryParseUtil;
 import org.carbondata.query.expression.ColumnExpression;
 import org.carbondata.query.expression.Expression;
 import org.carbondata.query.expression.conditional.ConditionalExpression;
+import org.carbondata.query.filter.resolver.FilterResolverIntf;
+import org.carbondata.query.filters.FilterExpressionProcessor;
 
 /**
  * Created by root1 on 30/4/16.
@@ -23,14 +27,17 @@ import org.carbondata.query.expression.conditional.ConditionalExpression;
 public class CarbonInputFormatUtil {
 
   public static QueryModel createQueryModel(AbsoluteTableIdentifier absoluteTableIdentifier,
-      CarbonTable carbonTable, String[] columns, Expression filterExpression) throws IOException {
+      CarbonTable carbonTable, String columnString) throws IOException {
     QueryModel executorModel = new QueryModel();
-    //TODO : Need to find out right table as per the dims and msrs requested.
+    String[] columns = null;
+    if (columnString != null) {
+      columns = columnString.split(",");
+    }
 
     String factTableName = carbonTable.getFactTableName();
     executorModel.setAbsoluteTableIdentifier(absoluteTableIdentifier);
 
-    fillExecutorModel(carbonTable, executorModel, factTableName, columns, filterExpression);
+    fillExecutorModel(carbonTable, executorModel, factTableName, columns);
     List<CarbonDimension> dims =
         new ArrayList<CarbonDimension>(CarbonCommonConstants.CONSTANT_SIZE_TEN);
 
@@ -43,7 +50,7 @@ public class CarbonInputFormatUtil {
   }
 
   private static void fillExecutorModel(CarbonTable carbonTable, QueryModel queryModel,
-      String factTableName, String[] columns, Expression filterExpression) {
+      String factTableName, String[] columns) {
 
     // fill dimensions
     List<CarbonDimension> carbonDimensions = new ArrayList<CarbonDimension>();
@@ -82,14 +89,17 @@ public class CarbonInputFormatUtil {
     // fill measures
     List<CarbonMeasure> carbonMeasures = carbonTable.getMeasureByTableName(factTableName);
 
-    // fill filter Column Expression
-    if (null != filterExpression) {
-      processFilterExpression(filterExpression, carbonDimensions, carbonMeasures);
-    }
-
   }
 
-  public static void processFilterExpression(Expression filterExpression,
+  public static void processFilterExpression(Expression filterExpression,CarbonTable carbonTable) {
+    List<CarbonDimension> dimensions =
+        carbonTable.getDimensionByTableName(carbonTable.getFactTableName());
+    List<CarbonMeasure> measures =
+        carbonTable.getMeasureByTableName(carbonTable.getFactTableName());
+    processFilterExpression(filterExpression, dimensions, measures);
+  }
+
+  private static void processFilterExpression(Expression filterExpression,
       List<CarbonDimension> dimensions, List<CarbonMeasure> measures) {
     if (null != filterExpression) {
       if (null != filterExpression.getChildren() && filterExpression.getChildren().size() == 0) {
@@ -99,7 +109,6 @@ public class CarbonInputFormatUtil {
           for (ColumnExpression expression : listOfCol) {
             setDimAndMsrColumnNode(dimensions, measures, (ColumnExpression) expression);
           }
-
         }
       }
       for (Expression expression : filterExpression.getChildren()) {
@@ -111,7 +120,6 @@ public class CarbonInputFormatUtil {
         }
       }
     }
-
   }
 
   private static void setDimAndMsrColumnNode(List<CarbonDimension> dimensions,
@@ -151,5 +159,30 @@ public class CarbonInputFormatUtil {
       carbonColumns[msr.getQueryOrder()] = msr;
     }
     return carbonColumns;
+  }
+
+  /**
+   * Resolve the filter expression.
+   * @param filterExpression
+   * @param absoluteTableIdentifier
+   * @return
+   * @throws IOException
+   * @throws IndexBuilderException
+   * @throws QueryExecutionException
+   */
+  public static FilterResolverIntf resolveFilter(Expression filterExpression,
+      AbsoluteTableIdentifier absoluteTableIdentifier)
+      throws IOException, IndexBuilderException, QueryExecutionException {
+
+    FilterExpressionProcessor filterExpressionProcessor = new FilterExpressionProcessor();
+    //get resolved filter
+    return filterExpressionProcessor.getFilterResolver(filterExpression, absoluteTableIdentifier);
+  }
+
+  public static String processPath(String path) {
+    if(path != null && path.startsWith("file:")) {
+      return path.substring(5, path.length());
+    }
+    return path;
   }
 }
