@@ -41,6 +41,7 @@ import org.carbondata.core.carbon.datastore.impl.btree.BlockBTreeLeafNode;
 import org.carbondata.core.carbon.metadata.schema.table.CarbonTable;
 import org.carbondata.core.carbon.path.CarbonStorePath;
 import org.carbondata.core.carbon.path.CarbonTablePath;
+import org.carbondata.hadoop.exception.CarbonInputFormatException;
 import org.carbondata.core.keygenerator.KeyGenException;
 import org.carbondata.hadoop.readsupport.CarbonReadSupport;
 import org.carbondata.hadoop.readsupport.impl.DictionaryDecodeReadSupport;
@@ -141,24 +142,24 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
    * @throws IOException
    */
   @Override public List<InputSplit> getSplits(JobContext job) throws IOException {
-    CarbonTable carbonTable = getCarbonTable(job.getConfiguration());
-    if (carbonTable == null) {
-      carbonTable = new SchemaReader()
-          .readCarbonTableFromStore(getTablePath(job.getConfiguration()),
-              getTableToAccess(job.getConfiguration()));
-      setCarbonTable(job, carbonTable);
-    }
-    Object filterPredicates = getFilterPredicates(job.getConfiguration());
-    //Get the valid segments from the carbon store.
-    SegmentStatusManager.ValidSegmentsInfo validSegments =
-        new SegmentStatusManager(getAbsoluteTableIdentifier(job.getConfiguration()))
-            .getValidSegments();
-    setSegmentsToAccess(job.getConfiguration(), validSegments.listOfValidSegments);
+    try {
+      CarbonTable carbonTable = getCarbonTable(job.getConfiguration());
+      if (carbonTable == null) {
+        carbonTable = new SchemaReader()
+            .readCarbonTableFromStore(getTablePath(job.getConfiguration()),
+                getTableToAccess(job.getConfiguration()));
+        setCarbonTable(job, carbonTable);
+      }
+      Object filterPredicates = getFilterPredicates(job.getConfiguration());
+      //Get the valid segments from the carbon store.
+      SegmentStatusManager.ValidSegmentsInfo validSegments =
+          new SegmentStatusManager(getAbsoluteTableIdentifier(job.getConfiguration()))
+              .getValidSegments();
+      setSegmentsToAccess(job.getConfiguration(), validSegments.listOfValidSegments);
 
-    if (filterPredicates == null) {
-      return getSplitsInternal(job);
-    } else {
-      try {
+      if (filterPredicates == null) {
+        return getSplitsInternal(job);
+      } else {
         if (filterPredicates instanceof Expression) {
           //process and resolve the expression.
           CarbonInputFormatUtil.processFilterExpression((Expression) filterPredicates, carbonTable);
@@ -168,9 +169,9 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
           //It means user sets already resolved expression.
           return getSplits(job, (FilterResolverIntf) filterPredicates);
         }
-      } catch (Exception ex) {
-        throw new IOException(ex.getMessage());
       }
+    } catch (Exception ex) {
+      throw new IOException(ex);
     }
   }
 
@@ -303,13 +304,13 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
    * @param configuration
    * @param filterExpression
    */
-  public static void setFilterPredicates(Configuration configuration, Expression filterExpression) {
-
+  public static void setFilterPredicates(Configuration configuration, Expression filterExpression)
+      throws CarbonInputFormatException {
     try {
       String filterString = ObjectSerializationUtil.convertObjectToString(filterExpression);
       configuration.set(FILTER_PREDICATE, filterString);
     } catch (Exception e) {
-      throw new RuntimeException(e);
+      throw new CarbonInputFormatException("Error while setting filter expression to Job", e);
     }
   }
 
@@ -320,17 +321,17 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
    * @param filterExpression
    */
   public static void setFilterPredicates(Configuration configuration,
-      FilterResolverIntf filterExpression) {
+      FilterResolverIntf filterExpression) throws CarbonInputFormatException {
     try {
       String filterString = ObjectSerializationUtil.convertObjectToString(filterExpression);
       configuration.set(FILTER_PREDICATE, filterString);
     } catch (Exception e) {
-      throw new RuntimeException(e);
+      throw new CarbonInputFormatException("Error while setting filter expression to Job", e);
     }
   }
 
-  private Object getFilterPredicates(Configuration configuration) {
-
+  private Object getFilterPredicates(Configuration configuration)
+      throws CarbonInputFormatException {
     try {
       String filterExprString = configuration.get(FILTER_PREDICATE);
       if (filterExprString == null) {
@@ -339,7 +340,7 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
       Object filterExprs = ObjectSerializationUtil.convertStringToObject(filterExprString);
       return filterExprs;
     } catch (IOException e) {
-      throw new RuntimeException(e);
+      throw new CarbonInputFormatException("Error while reading filter expression", e);
     }
   }
 
@@ -467,19 +468,20 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
 
   @Override public RecordReader<Void, T> createRecordReader(InputSplit inputSplit,
       TaskAttemptContext taskAttemptContext) throws IOException, InterruptedException {
-    CarbonTable carbonTable = getCarbonTable(taskAttemptContext.getConfiguration());
-    Object filterPredicates = getFilterPredicates(taskAttemptContext.getConfiguration());
-
-    QueryModel queryModel = CarbonInputFormatUtil
-        .createQueryModel(getAbsoluteTableIdentifier(taskAttemptContext.getConfiguration()),
-            carbonTable, taskAttemptContext.getConfiguration().get(COLUMN_PROJECTION));
+    Configuration configuration = taskAttemptContext.getConfiguration();
+    CarbonTable carbonTable = getCarbonTable(configuration);
+    QueryModel queryModel;
     try {
+      queryModel = CarbonInputFormatUtil
+          .createQueryModel(getAbsoluteTableIdentifier(configuration), carbonTable,
+              configuration.get(COLUMN_PROJECTION));
+      Object filterPredicates = getFilterPredicates(configuration);
       if (filterPredicates != null) {
         if (filterPredicates instanceof Expression) {
           CarbonInputFormatUtil.processFilterExpression((Expression) filterPredicates, carbonTable);
           queryModel.setFilterExpressionResolverTree(CarbonInputFormatUtil
               .resolveFilter((Expression) filterPredicates,
-                  getAbsoluteTableIdentifier(taskAttemptContext.getConfiguration())));
+                  getAbsoluteTableIdentifier(configuration)));
         } else {
           queryModel.setFilterExpressionResolverTree((FilterResolverIntf) filterPredicates);
         }
@@ -487,14 +489,12 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
     } catch (Exception e) {
       throw new IOException(e);
     }
-
-    CarbonReadSupport readSupport = getReadSupportClass(taskAttemptContext);
-
+    CarbonReadSupport readSupport = getReadSupportClass(configuration);
     return new CarbonRecordReader<T>(queryModel, readSupport);
   }
 
-  private CarbonReadSupport getReadSupportClass(TaskAttemptContext taskAttemptContext) {
-    String readSupportClass = taskAttemptContext.getConfiguration().get(CARBON_READ_SUPPORT);
+  private CarbonReadSupport getReadSupportClass(Configuration configuration) {
+    String readSupportClass = configuration.get(CARBON_READ_SUPPORT);
     //By default it uses dictionary decoder read class
     CarbonReadSupport readSupport = new DictionaryDecodeReadSupport();
     if (readSupportClass != null) {
@@ -575,8 +575,7 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
     if (tableIdentifier == null) {
       throw new IOException("Could not find " + DATABASE_NAME + "," + TABLE_NAME);
     }
-    return CarbonStorePath
-        .getCarbonTablePath(storePathString, tableIdentifier);
+    return CarbonStorePath.getCarbonTablePath(storePathString, tableIdentifier);
   }
 
   /**

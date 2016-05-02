@@ -41,10 +41,10 @@ import org.carbondata.spark.{CarbonOption, _}
 class CarbonSource extends RelationProvider with CreatableRelationProvider {
 
   /**
-   * Returns a new base relation with the given parameters.
-   * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
-   * by the Map that is passed to the function.
-   */
+    * Returns a new base relation with the given parameters.
+    * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
+    * by the Map that is passed to the function.
+    */
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
