@@ -22,7 +22,7 @@ public class SchemaReader {
   public CarbonTable readCarbonTableFromStore(CarbonTablePath carbonTablePath,
       CarbonTableIdentifier tableIdentifier) throws IOException {
     String schemaFilePath = carbonTablePath.getSchemaFilePath();
-    if (FileFactory.isFileExist(schemaFilePath, FileFactory.getFileType(schemaFilePath))) {
+    if (FileFactory.isFileExist(schemaFilePath, FileFactory.FileType.HDFS)) {
       String tableName = tableIdentifier.getTableName();
 
       ThriftReader.TBaseCreator createTBase = new ThriftReader.TBaseCreator() {
@@ -31,7 +31,7 @@ public class SchemaReader {
         }
       };
       ThriftReader thriftReader =
-          new ThriftReader(carbonTablePath.getMetadataDirectoryPath(), createTBase);
+          new ThriftReader(carbonTablePath.getSchemaFilePath(), createTBase);
       thriftReader.open();
       org.carbondata.format.TableInfo tableInfo =
           (org.carbondata.format.TableInfo) thriftReader.read();
