@@ -11,6 +11,7 @@ import org.carbondata.core.carbon.metadata.schema.table.column.CarbonColumn;
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension;
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonMeasure;
 import org.carbondata.core.constants.CarbonCommonConstants;
+import org.carbondata.hadoop.exception.CarbonInputFormatException;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
 import org.carbondata.query.carbon.model.DimensionAggregatorInfo;
 import org.carbondata.query.carbon.model.QueryModel;
@@ -27,7 +28,7 @@ import org.carbondata.query.filters.FilterExpressionProcessor;
 public class CarbonInputFormatUtil {
 
   public static QueryModel createQueryModel(AbsoluteTableIdentifier absoluteTableIdentifier,
-      CarbonTable carbonTable, String columnString) throws IOException {
+      CarbonTable carbonTable, String columnString) throws CarbonInputFormatException {
     QueryModel executorModel = new QueryModel();
     String[] columns = null;
     if (columnString != null) {
@@ -50,7 +51,7 @@ public class CarbonInputFormatUtil {
   }
 
   private static void fillExecutorModel(CarbonTable carbonTable, QueryModel queryModel,
-      String factTableName, String[] columns) {
+      String factTableName, String[] columns) throws CarbonInputFormatException {
 
     // fill dimensions
     List<CarbonDimension> carbonDimensions = new ArrayList<CarbonDimension>();
@@ -70,11 +71,15 @@ public class CarbonInputFormatUtil {
     } else {
       for (String column : columns) {
         CarbonDimension dimensionByName = carbonTable.getDimensionByName(factTableName, column);
-        dimensionByName.setQueryOrder(i++);
         if (dimensionByName != null) {
+          dimensionByName.setQueryOrder(i++);
           carbonDimensions.add(dimensionByName);
         } else {
           CarbonMeasure measure = carbonTable.getMeasureByName(factTableName, column);
+          if (measure == null) {
+            throw new CarbonInputFormatException(
+                column + " column not found in the table " + factTableName);
+          }
           measure.setQueryOrder(i++);
           carbonMsrs.add(measure);
         }
@@ -85,13 +90,14 @@ public class CarbonInputFormatUtil {
     queryModel.setQueryMeasures(carbonMsrs);
     queryModel.setSortOrder(new byte[0]);
     queryModel.setSortDimension(new ArrayList<CarbonDimension>(0));
+    queryModel.setLimit(-1);
 
     // fill measures
     List<CarbonMeasure> carbonMeasures = carbonTable.getMeasureByTableName(factTableName);
 
   }
 
-  public static void processFilterExpression(Expression filterExpression,CarbonTable carbonTable) {
+  public static void processFilterExpression(Expression filterExpression, CarbonTable carbonTable) {
     List<CarbonDimension> dimensions =
         carbonTable.getDimensionByTableName(carbonTable.getFactTableName());
     List<CarbonMeasure> measures =
@@ -148,6 +154,9 @@ public class CarbonInputFormatUtil {
     return null;
   }
 
+  /**
+   * It gets the projection columns
+   */
   public static CarbonColumn[] getProjectionColumns(QueryModel queryModel) {
     CarbonColumn[] carbonColumns =
         new CarbonColumn[queryModel.getQueryDimension().size() + queryModel.getQueryMeasures()
@@ -166,21 +175,22 @@ public class CarbonInputFormatUtil {
    * @param filterExpression
    * @param absoluteTableIdentifier
    * @return
-   * @throws IOException
-   * @throws IndexBuilderException
-   * @throws QueryExecutionException
+   * @throws CarbonInputFormatException
    */
   public static FilterResolverIntf resolveFilter(Expression filterExpression,
       AbsoluteTableIdentifier absoluteTableIdentifier)
-      throws IOException, IndexBuilderException, QueryExecutionException {
-
-    FilterExpressionProcessor filterExpressionProcessor = new FilterExpressionProcessor();
-    //get resolved filter
-    return filterExpressionProcessor.getFilterResolver(filterExpression, absoluteTableIdentifier);
+      throws CarbonInputFormatException {
+    try {
+      FilterExpressionProcessor filterExpressionProcessor = new FilterExpressionProcessor();
+      //get resolved filter
+      return filterExpressionProcessor.getFilterResolver(filterExpression, absoluteTableIdentifier);
+    } catch (Exception e) {
+      throw new CarbonInputFormatException("Error while resolving filter expression", e);
+    }
   }
 
   public static String processPath(String path) {
-    if(path != null && path.startsWith("file:")) {
+    if (path != null && path.startsWith("file:")) {
       return path.substring(5, path.length());
     }
     return path;
