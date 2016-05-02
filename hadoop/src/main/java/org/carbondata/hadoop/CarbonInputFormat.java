@@ -148,18 +148,7 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
     setCarbonTable(job, carbonTable);
     Expression filterPredicates = getFilterPredicates(job.getConfiguration());
     if (filterPredicates == null) {
-      List<InputSplit> splits = super.getSplits(job);
-      List<InputSplit> carbonSplits = new ArrayList<InputSplit>(splits.size());
-      // identify table blocks
-      for (InputSplit inputSplit : splits) {
-        FileSplit fileSplit = (FileSplit) inputSplit;
-        int segmentId = CarbonTablePath.DataPathUtil.getSegmentId(fileSplit.getPath().toString());
-        if (INVALID_SEGMENT_ID == segmentId) {
-          continue;
-        }
-        carbonSplits.add(CarbonInputSplit.from(segmentId, fileSplit));
-      }
-      return carbonSplits;
+      return getSplitsInternal(job);
     } else {
       try {
         CarbonInputFormatUtil.processFilterExpression(filterPredicates,
@@ -170,6 +159,21 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
         throw new IOException(ex.getMessage());
       }
     }
+  }
+
+  private List<InputSplit> getSplitsInternal(JobContext job) throws IOException {
+    List<InputSplit> splits = super.getSplits(job);
+    List<InputSplit> carbonSplits = new ArrayList<InputSplit>(splits.size());
+    // identify table blocks
+    for (InputSplit inputSplit : splits) {
+      FileSplit fileSplit = (FileSplit) inputSplit;
+      int segmentId = CarbonTablePath.DataPathUtil.getSegmentId(fileSplit.getPath().toString());
+      if (INVALID_SEGMENT_ID == segmentId) {
+        continue;
+      }
+      carbonSplits.add(CarbonInputSplit.from(segmentId, fileSplit));
+    }
+    return carbonSplits;
   }
 
   private void setCarbonTable(JobContext job, CarbonTable carbonTable) throws IOException {
@@ -362,7 +366,7 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
       newJob.getConfiguration().set(CarbonInputFormat.INPUT_SEGMENT_NUMBERS, segmentId + "");
 
       // identify table blocks
-      for (InputSplit inputSplit : getSplits(newJob)) {
+      for (InputSplit inputSplit : getSplitsInternal(newJob)) {
         CarbonInputSplit carbonInputSplit = (CarbonInputSplit) inputSplit;
         tableBlockInfoList.add(
             new TableBlockInfo(carbonInputSplit.getPath().toString(), carbonInputSplit.getStart(),
