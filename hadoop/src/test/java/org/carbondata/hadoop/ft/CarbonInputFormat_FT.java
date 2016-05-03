@@ -53,7 +53,7 @@ public class CarbonInputFormat_FT extends TestCase {
     Job job = new Job(jobConf);
     CarbonTableIdentifier tableIdentifier = new CarbonTableIdentifier("db", "table1");
     FileInputFormat.addInputPath(job, new Path("/opt/carbonstore/"));
-    CarbonInputFormat.setTableToAccess(job, tableIdentifier);
+    CarbonInputFormat.setTableToAccess(job.getConfiguration(), tableIdentifier);
 //    CarbonInputFormat.setSegmentsToAccess(job, Arrays.asList(1, 2));
     List splits = carbonInputFormat.getSplits(job);
 
@@ -67,7 +67,7 @@ public class CarbonInputFormat_FT extends TestCase {
     Job job = new Job(jobConf);
     CarbonTableIdentifier tableIdentifier = new CarbonTableIdentifier("db", "table1");
     FileInputFormat.addInputPath(job, new Path("/opt/carbonstore/"));
-    CarbonInputFormat.setTableToAccess(job, tableIdentifier);
+    CarbonInputFormat.setTableToAccess(job.getConfiguration(), tableIdentifier);
 //    CarbonInputFormat.setSegmentsToAccess(job, Arrays.asList(1, 2));
     Expression expression = new EqualToExpression(new ColumnExpression("c1", DataType.StringType),
         new LiteralExpression("a", DataType.StringType));

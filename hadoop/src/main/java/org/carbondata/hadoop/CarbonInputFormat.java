@@ -96,27 +96,27 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
   public static final String INPUT_SEGMENT_NUMBERS =
       "mapreduce.input.carboninputformat.segmentnumbers";
 
-  public static void setTableToAccess(Job job, CarbonTableIdentifier tableIdentifier) {
-    job.getConfiguration().set(CarbonInputFormat.DATABASE_NAME, tableIdentifier.getDatabaseName());
-    job.getConfiguration().set(CarbonInputFormat.TABLE_NAME, tableIdentifier.getTableName());
+  public static void setTableToAccess(Configuration configuration,
+      CarbonTableIdentifier tableIdentifier) {
+    configuration.set(CarbonInputFormat.DATABASE_NAME, tableIdentifier.getDatabaseName());
+    configuration.set(CarbonInputFormat.TABLE_NAME, tableIdentifier.getTableName());
   }
 
   /**
    * Set List of segments to access
    */
-  public static void setSegmentsToAccess(Job job, List<Integer> segmentNosList) {
+  public void setSegmentsToAccess(Configuration configuration, List<String> segmentNosList) {
 
     //serialize to comma separated string
     StringBuilder stringSegmentsBuilder = new StringBuilder();
     for (int i = 0; i < segmentNosList.size(); i++) {
-      Integer segmentNo = segmentNosList.get(i);
+      String segmentNo = segmentNosList.get(i);
       stringSegmentsBuilder.append(segmentNo);
       if (i < segmentNosList.size() - 1) {
         stringSegmentsBuilder.append(",");
       }
     }
-    job.getConfiguration()
-        .set(CarbonInputFormat.INPUT_SEGMENT_NUMBERS, stringSegmentsBuilder.toString());
+    configuration.set(CarbonInputFormat.INPUT_SEGMENT_NUMBERS, stringSegmentsBuilder.toString());
   }
 
   /**
