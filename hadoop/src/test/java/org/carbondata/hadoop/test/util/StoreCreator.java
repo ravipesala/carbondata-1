@@ -19,10 +19,16 @@
 package org.carbondata.hadoop.test.util;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -48,6 +54,9 @@ import org.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema;
 import org.carbondata.core.carbon.path.CarbonStorePath;
 import org.carbondata.core.carbon.path.CarbonTablePath;
 import org.carbondata.core.constants.CarbonCommonConstants;
+import org.carbondata.core.datastorage.store.fileperations.AtomicFileOperations;
+import org.carbondata.core.datastorage.store.fileperations.AtomicFileOperationsImpl;
+import org.carbondata.core.datastorage.store.fileperations.FileWriteOperation;
 import org.carbondata.core.datastorage.store.impl.FileFactory;
 import org.carbondata.core.load.BlockDetails;
 import org.carbondata.core.load.LoadMetadataDetails;
@@ -65,6 +74,8 @@ import org.carbondata.processing.graphgenerator.GraphGenerator;
 import org.carbondata.processing.graphgenerator.GraphGeneratorException;
 import org.carbondata.processing.util.CarbonDataProcessorUtil;
 
+import com.google.gson.Gson;
+
 /**
  * This class will create store file based on provided schema
  *
@@ -76,7 +87,7 @@ public class StoreCreator {
 
   static {
     try {
-      String storePath = new File("src/test/resources/store").getCanonicalPath();
+      String storePath = new File("target/store").getCanonicalPath();
       String dbName = "testdb";
       String tableName = "testtable";
       absoluteTableIdentifier =
@@ -84,6 +95,10 @@ public class StoreCreator {
     } catch (IOException ex) {
 
     }
+  }
+
+  public static AbsoluteTableIdentifier getAbsoluteTableIdentifier() {
+    return absoluteTableIdentifier;
   }
 
   /**
@@ -96,6 +111,8 @@ public class StoreCreator {
       String factFilePath = new File("src/test/resources/data.csv").getCanonicalPath();
       File storeDir = new File(absoluteTableIdentifier.getStorePath());
       CarbonUtil.deleteFoldersAndFiles(storeDir);
+      CarbonProperties.getInstance().addProperty(CarbonCommonConstants.STORE_LOCATION_HDFS,
+          absoluteTableIdentifier.getStorePath());
 
       String kettleHomePath = "../processing/carbonplugins";
       int currentRestructureNumber = 0;
@@ -126,7 +143,7 @@ public class StoreCreator {
     tableSchema.setTableName(absoluteTableIdentifier.getCarbonTableIdentifier().getTableName());
     List<ColumnSchema> columnSchemas = new ArrayList<ColumnSchema>();
     ArrayList<Encoding> encodings = new ArrayList<>();
-    encodings.add(Encoding.DIRECT_DICTIONARY);
+    encodings.add(Encoding.DICTIONARY);
     ColumnSchema id = new ColumnSchema();
     id.setColumnName("ID");
     id.setColumnar(true);
@@ -304,7 +321,7 @@ public class StoreCreator {
     blockDetails.setFilePath(loadModel.getFactFilePath());
     blockDetails.setBlockOffset(0);
     blockDetails.setBlockLength(new File(loadModel.getFactFilePath()).length());
-    GraphGenerator.blockInfo.put("qwqwq", new BlockDetails[]{blockDetails});
+    GraphGenerator.blockInfo.put("qwqwq", new BlockDetails[] { blockDetails });
     schmaModel.setBlocksID("qwqwq");
 
     info.setSchemaName(schemaName);
@@ -317,6 +334,46 @@ public class StoreCreator {
     graphExecuter
         .executeGraph(graphPath, new ArrayList<String>(CarbonCommonConstants.CONSTANT_SIZE_TEN),
             info, "0", loadModel.getSchema());
+    LoadMetadataDetails[] loadDetails =
+        CarbonUtil.readLoadMetadata(loadModel.schema.getCarbonTable().getMetaDataFilepath());
+    writeLoadMetadata(loadModel.schema, loadModel.getCubeName(), loadModel.getTableName(),
+        Arrays.asList(loadDetails));
+  }
+
+  public static void writeLoadMetadata(CarbonDataLoadSchema schema, String schemaName,
+      String cubeName, List<LoadMetadataDetails> listOfLoadFolderDetails) throws IOException {
+    String dataLoadLocation = schema.getCarbonTable().getMetaDataFilepath() + File.separator
+        + CarbonCommonConstants.LOADMETADATA_FILENAME;
+
+    DataOutputStream dataOutputStream;
+    Gson gsonObjectToWrite = new Gson();
+    BufferedWriter brWriter = null;
+
+    AtomicFileOperations writeOperation =
+        new AtomicFileOperationsImpl(dataLoadLocation, FileFactory.getFileType(dataLoadLocation));
+
+    try {
+
+      dataOutputStream = writeOperation.openForWrite(FileWriteOperation.OVERWRITE);
+      brWriter = new BufferedWriter(new OutputStreamWriter(dataOutputStream,
+          CarbonCommonConstants.CARBON_DEFAULT_STREAM_ENCODEFORMAT));
+
+      String metadataInstance = gsonObjectToWrite.toJson(listOfLoadFolderDetails.toArray());
+      brWriter.write(metadataInstance);
+    } finally {
+      try {
+        if (null != brWriter) {
+          brWriter.flush();
+        }
+      } catch (Exception e) {
+        throw e;
+
+      }
+      CarbonUtil.closeStreams(brWriter);
+
+    }
+    writeOperation.close();
+
   }
 
   /**
@@ -342,6 +399,7 @@ public class StoreCreator {
     model.setTableName(schmaModel.getTableName());
     model.setTaskNo("1");
     model.setBlocksID(schmaModel.getBlocksID());
+    model.setFactTimeStamp(readCurrentTime());
     if (null != loadMetadataDetails && !loadMetadataDetails.isEmpty()) {
       model.setLoadNames(
           CarbonDataProcessorUtil.getLoadNameFromLoadMetaDataDetails(loadMetadataDetails));
@@ -357,7 +415,16 @@ public class StoreCreator {
     generator.generateGraph();
   }
 
-   /**
+  public static String readCurrentTime() {
+    SimpleDateFormat sdf = new SimpleDateFormat(CarbonCommonConstants.CARBON_TIMESTAMP);
+    String date = null;
+
+    date = sdf.format(new Date());
+
+    return date;
+  }
+
+  /**
    * This is local model object used inside this class to store information related to data loading
    *
    * @author Administrator
