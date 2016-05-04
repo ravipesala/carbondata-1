@@ -32,8 +32,8 @@ public abstract class AbstractQueryResultPreparator<E> implements QueryResultPre
     this.queryModel = queryModel;
   }
 
-  protected void fillMeasureValueForAggGroupByQuery(QueryModel queryModel, Object[][] surrogateResult,
-      int dimensionCount, int columnIndex, MeasureAggregator[] v) {
+  protected void fillMeasureValueForAggGroupByQuery(QueryModel queryModel,
+      Object[][] surrogateResult, int dimensionCount, int columnIndex, MeasureAggregator[] v) {
     int msrCount = queryModel.getQueryMeasures().size();
     for (int i = 0; i < msrCount; i++) {
       v[queryExecuterProperties.measureStartIndex + i] =

@@ -60,7 +60,7 @@ class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveCon
     val sqlString = sql.toUpperCase
     LOGGER.info(s"Query [$sqlString]")
     val logicPlan: LogicalPlan = parseSql(sql)
-    val result = new CarbonDataFrameRDD(sql: String, this, logicPlan)
+    val result = new CarbonDataFrameRDD(this, logicPlan)
 
     // We force query optimization to happen right away instead of letting it happen lazily like
     // when using the query DSL.  This is so DDL commands behave as expected.  This is only
