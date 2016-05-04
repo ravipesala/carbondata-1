@@ -28,7 +28,6 @@ import org.apache.spark.sql.hive._
 import org.carbondata.common.logging.LogServiceFactory
 import org.carbondata.core.util.CarbonProperties
 import org.carbondata.integration.spark.rdd.{CarbonDataFrameRDD, CarbonDictionaryDecodeRDD}
-import org.carbondata.integration.spark.util.CarbonSparkInterFaceLogEvent
 
 class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveContext(sc) {
   self =>
@@ -69,7 +68,7 @@ class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveCon
     LOGGER
           .info(s"Query [$sqlString]")
     val logicPlan: LogicalPlan = parseSql(sql)
-    val result = new CarbonDataFrameRDD(sql: String, this, logicPlan)
+    val result = new CarbonDataFrameRDD(this, logicPlan)
 
     // We force query optimization to happen right away instead of letting it happen lazily like
     // when using the query DSL.  This is so DDL commands behave as expected.  This is only
@@ -99,6 +98,25 @@ object CarbonContext {
    *                   if set as true, By default it will check for 10000 characters in multiple
    *                   lines for end of quote & skip all lines if end of quote not found.
    */
+   /**
+    * @param schemaName - Schema Name
+    * @param cubeName   - Cube Name
+    * @param factPath   - Raw CSV data path
+    * @param targetPath - Target path where the file will be split as per partition
+    * @param delimiter  - default file delimiter is comma(,)
+    * @param quoteChar  - default quote character used in Raw CSV file, Default quote
+    *                   character is double quote(")
+    * @param fileHeader - Header should be passed if not available in Raw CSV File, else pass null,
+    *                   Header will be read from CSV
+    * @param escapeChar - This parameter by default will be null, there wont be any validation if
+    *                   default escape character(\) is found on the RawCSV file
+    * @param multiLine  - This parameter will be check for end of quote character if escape
+    *                     character & quote character is set.
+    *                   if set as false, it will check for end of quote character within the line
+    *                   and skips only 1 line if end of quote not found
+    *                   if set as true, By default it will check for 10000 characters in multiple
+    *                   lines for end of quote & skip all lines if end of quote not found.
+    */
   final def partitionData(
                            schemaName: String = null,
                            cubeName: String,

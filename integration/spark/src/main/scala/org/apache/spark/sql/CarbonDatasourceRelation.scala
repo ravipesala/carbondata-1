@@ -30,16 +30,17 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.hive.{CarbonMetaData, CarbonMetastoreTypes, TableMeta}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider}
 import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
+
 import org.carbondata.core.carbon.metadata.encoder.Encoding
 import org.carbondata.integration.spark.{CarbonOption, _}
 
-/**
+ /**
   * Carbon relation provider compliant to data source api.
   * Creates carbon relations
   */
 class CarbonSource extends RelationProvider with CreatableRelationProvider {
 
-  /**
+   /**
     * Returns a new base relation with the given parameters.
     * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
     * by the Map that is passed to the function.
@@ -99,7 +100,7 @@ class CarbonSource extends RelationProvider with CreatableRelationProvider {
   }
 }
 
-/**
+ /**
   * Creates carbon relation compliant to data source api.
   * This relation is stored to hive metastore
   */
@@ -120,7 +121,7 @@ private[sql] case class CarbonDatasourceRelation(
 }
 
 
-/**
+ /**
   * Represents logical plan for one carbon cube
   */
 case class CarbonRelation(schemaName: String,
