@@ -5,12 +5,12 @@ import java.util.List;
 import org.carbondata.common.logging.LogService;
 import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.carbon.metadata.encoder.Encoding;
-import org.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension;
-import org.carbondata.core.carbon.metadata.schema.table.column.CarbonMeasure;
 import org.carbondata.core.constants.CarbonCommonConstants;
 import org.carbondata.core.util.CarbonUtil;
 import org.carbondata.query.aggregator.MeasureAggregator;
 import org.carbondata.query.carbon.executor.impl.QueryExecutorProperties;
+import org.carbondata.query.carbon.model.QueryDimension;
+import org.carbondata.query.carbon.model.QueryMeasure;
 import org.carbondata.query.carbon.model.QueryModel;
 import org.carbondata.query.carbon.result.BatchRawResult;
 import org.carbondata.query.carbon.result.Result;
@@ -35,7 +35,7 @@ public class RawQueryResultPreparatorImpl extends AbstractQueryResultPreparator<
     if ((null == scannedResult || scannedResult.size() < 1)) {
       return new BatchRawResult(new Object[0][0]);
     }
-    List<CarbonDimension> queryDimension = queryModel.getQueryDimension();
+    List<QueryDimension> queryDimension = queryModel.getQueryDimension();
     int dimensionCount = queryDimension.size();
     int totalNumberOfColumn = dimensionCount + queryExecuterProperties.measureAggregators.length;
     Object[][] resultData = new Object[scannedResult.size()][totalNumberOfColumn];
@@ -51,17 +51,19 @@ public class RawQueryResultPreparatorImpl extends AbstractQueryResultPreparator<
           .getKeyArray(key.getDictionaryKey(),
               queryExecuterProperties.keyStructureInfo.getMaskedBytes());
       for (int i = 0; i < dimensionCount; i++) {
-        if (!CarbonUtil.hasEncoding(queryDimension.get(i).getEncoder(), Encoding.DICTIONARY)) {
+        if (!CarbonUtil
+            .hasEncoding(queryDimension.get(i).getDimension().getEncoder(), Encoding.DICTIONARY)) {
           resultData[currentRow][i] = DataTypeUtil.getDataBasedOnDataType(
               new String(key.getNoDictionaryKeyByIndex(noDictionaryColumnIndex++)),
-              queryDimension.get(i).getDataType());
+              queryDimension.get(i).getDimension().getDataType());
         } else {
           /*resultData[currentRow][i] = getKeyInBytes(key.getDictionaryKey(),
               queryExecuterProperties.keyStructureInfo.getMaskedBytes(),
               queryDimension.get(i).getQueryOrder(),
               queryExecuterProperties.keyStructureInfo.getKeyGenerator()
                   .getKeyByteOffsets(queryDimension.get(i).getKeyOrdinal()));*/
-          resultData[currentRow][i] = (int)surrogateResult[queryDimension.get(i).getKeyOrdinal()];
+          resultData[currentRow][i] =
+              (int) surrogateResult[queryDimension.get(i).getDimension().getKeyOrdinal()];
         }
       }
 
@@ -88,12 +90,12 @@ public class RawQueryResultPreparatorImpl extends AbstractQueryResultPreparator<
 
   private BatchRawResult getResult(QueryModel queryModel, Object[][] convertedResult) {
 
-    List<CarbonDimension> queryDimensions = queryModel.getQueryDimension();
+    List<QueryDimension> queryDimensions = queryModel.getQueryDimension();
     int dimensionCount = queryDimensions.size();
     int msrCount = queryExecuterProperties.measureAggregators.length;
     Object[][] resultDataA = new Object[dimensionCount + msrCount][convertedResult[0].length];
 
-    CarbonDimension queryDimension = null;
+    QueryDimension queryDimension = null;
     for (int columnIndex = 0; columnIndex < resultDataA[0].length; columnIndex++) {
       for (int i = 0; i < dimensionCount; i++) {
         queryDimension = queryDimensions.get(i);
@@ -105,7 +107,7 @@ public class RawQueryResultPreparatorImpl extends AbstractQueryResultPreparator<
       fillMeasureValueForAggGroupByQuery(queryModel, convertedResult, dimensionCount, columnIndex,
           msrAgg);
 
-      CarbonMeasure msr = null;
+      QueryMeasure msr = null;
       for (int i = 0; i < queryModel.getQueryMeasures().size(); i++) {
         msr = queryModel.getQueryMeasures().get(i);
         if (msrAgg[queryExecuterProperties.measureStartIndex + i].isFirstTime() && (
@@ -116,7 +118,7 @@ public class RawQueryResultPreparatorImpl extends AbstractQueryResultPreparator<
           resultDataA[msr.getQueryOrder()][columnIndex] = null;
         } else {
           Object msrVal;
-          switch (msr.getDataType()) {
+          switch (msr.getMeasure().getDataType()) {
             case LONG:
               msrVal = msrAgg[queryExecuterProperties.measureStartIndex + i].getLongValue();
               break;
@@ -127,7 +129,8 @@ public class RawQueryResultPreparatorImpl extends AbstractQueryResultPreparator<
               msrVal = msrAgg[queryExecuterProperties.measureStartIndex + i].getDoubleValue();
           }
           resultDataA[msr.getQueryOrder()][columnIndex] = DataTypeUtil
-              .getMeasureDataBasedOnDataType(msrVal == null ? null : msrVal, msr.getDataType());
+              .getMeasureDataBasedOnDataType(msrVal == null ? null : msrVal,
+                  msr.getMeasure().getDataType());
         }
       }
     }
