@@ -36,9 +36,9 @@ import org.carbondata.core.util.CarbonProperties
 import org.carbondata.integration.spark.{RawKeyVal, RawKeyValImpl}
 import org.carbondata.integration.spark.cache.QueryPredicateTempCache
 import org.carbondata.integration.spark.query.CarbonQueryPlan
-import org.carbondata.integration.spark.query.metadata.{CarbonPlanDimension, CarbonPlanMeasure, SortOrderType}
 import org.carbondata.integration.spark.rdd.CarbonRawQueryRDD
 import org.carbondata.integration.spark.util.{CarbonQueryUtil, CarbonScalaUtil}
+import org.carbondata.query.carbon.model.{QueryDimension, QueryMeasure}
 import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression, Expression => CarbonExpression, LiteralExpression => CarbonLiteralExpression}
 import org.carbondata.query.expression.arithmetic.{AddExpression, DivideExpression, MultiplyExpression, SubstractExpression}
 import org.carbondata.query.expression.conditional._
@@ -46,15 +46,15 @@ import org.carbondata.query.expression.logical.{AndExpression, OrExpression}
 
 
 case class CarbonRawCubeScan(
-                              var attributes: Seq[Attribute],
-                              relation: CarbonRelation,
-                              dimensionPredicates: Seq[Expression])(@transient val oc: SQLContext)
+  var attributes: Seq[Attribute],
+  relation: CarbonRelation,
+  dimensionPredicates: Seq[Expression])(@transient val oc: SQLContext)
   extends LeafNode {
 
   val cubeName = relation.cubeName
   val carbonTable = relation.metaData.carbonTable
-  val selectedDims = scala.collection.mutable.MutableList[CarbonPlanDimension]()
-  val selectedMsrs = scala.collection.mutable.MutableList[CarbonPlanMeasure]()
+  val selectedDims = scala.collection.mutable.MutableList[QueryDimension]()
+  val selectedMsrs = scala.collection.mutable.MutableList[QueryMeasure]()
   var outputColumns = scala.collection.mutable.MutableList[Attribute]()
   var extraPreds: Seq[Expression] = Nil
   val allDims = new scala.collection.mutable.HashSet[String]()
@@ -67,33 +67,34 @@ case class CarbonRawCubeScan(
 
 
     var queryOrder: Integer = 0
-    attributes.map(attr => {
-      val carbonDimension = CarbonQueryUtil.getCarbonDimension(
-        carbonTable.getDimensionByTableName(carbonTable.getFactTableName), attr.name);
-      if (carbonDimension != null) {
-        // TODO if we can add ordina in carbonDimension, it will be good
-        allDims += attr.name
-        val dim = new CarbonPlanDimension(attr.name)
-        dim.setQueryOrder(queryOrder);
-        queryOrder = queryOrder + 1
-        selectedDims += dim
-      } else {
-        val carbonMeasure = CarbonQueryUtil.getCarbonMeasure(attr.name,
-          carbonTable.getMeasureByTableName(carbonTable.getFactTableName()));
-        if (carbonMeasure != null) {
-          val m1 = new CarbonPlanMeasure(attr.name)
-          m1.setQueryOrder(queryOrder);
+    attributes.map(
+      attr => {
+        val carbonDimension = carbonTable.getDimensionByName(carbonTable.getFactTableName
+          , attr.name)
+        if (carbonDimension != null) {
+          // TODO if we can add ordina in carbonDimension, it will be good
+          allDims += attr.name
+          val dim = new QueryDimension(attr.name)
+          dim.setQueryOrder(queryOrder);
           queryOrder = queryOrder + 1
-          selectedMsrs += m1
+          selectedDims += dim
+        } else {
+          val carbonMeasure = carbonTable.getMeasureByName(carbonTable.getFactTableName()
+            , attr.name)
+          if (carbonMeasure != null) {
+            val m1 = new QueryMeasure(attr.name)
+            m1.setQueryOrder(queryOrder);
+            queryOrder = queryOrder + 1
+            selectedMsrs += m1
+          }
         }
-      }
-    })
+      })
     queryOrder = 0
 
     selectedDims.foreach(plan.addDimension(_))
     selectedMsrs.foreach(plan.addMeasure(_))
 
-    val orderList = new ArrayList[CarbonPlanDimension]()
+    val orderList = new ArrayList[QueryDimension]()
 
     plan.setSortedDimemsions(orderList)
     plan.setDetailQuery(true)
@@ -121,16 +122,8 @@ case class CarbonRawCubeScan(
     }
   }
 
-  private def getSortDirection(sort: SortDirection) = {
-    sort match {
-      case Ascending => SortOrderType.ASC
-      case Descending => SortOrderType.DSC
-    }
-  }
-
-
   def addPushdownFilters(keys: Seq[Expression], filters: Array[Array[Expression]],
-                         conditions: Option[Expression]) {
+    conditions: Option[Expression]) {
 
     // TODO Values in the IN filter is duplicate. replace the list with set
     val buffer = new ArrayBuffer[Expression]
