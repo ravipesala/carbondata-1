@@ -29,15 +29,15 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.hive.{CarbonMetaData, CarbonMetastoreTypes, TableMeta}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider}
-import org.apache.spark.sql.types.{DataType, StructType}
-
+import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
+import org.carbondata.core.carbon.metadata.encoder.Encoding
 import org.carbondata.integration.spark.{CarbonOption, _}
 
 /**
   * Carbon relation provider compliant to data source api.
   * Creates carbon relations
   */
-class CarbonSource extends RelationProvider with CreatableRelationProvider{
+class CarbonSource extends RelationProvider with CreatableRelationProvider {
 
   /**
     * Returns a new base relation with the given parameters.
@@ -65,7 +65,8 @@ class CarbonSource extends RelationProvider with CreatableRelationProvider{
     // User should not specify path since only one store is supported in carbon currently,
     // after we support multi-store, we can remove this limitation
     require(!parameters.contains("path"), "'path' should not be specified, " +
-                                          "the path to store carbon file is the 'storePath' specified when creating CarbonContext")
+                                          "the path to store carbon file is the 'storePath' " +
+                                          "specified when creating CarbonContext")
 
     val options = new CarbonOption(parameters)
     val storePath = CarbonContext.getInstance(sqlContext.sparkContext).storePath
@@ -108,9 +109,10 @@ private[sql] case class CarbonDatasourceRelation(
   (@transient context: SQLContext)
   extends BaseRelation with Serializable with Logging {
 
-  def carbonRelation: CarbonRelation =
+  def carbonRelation: CarbonRelation = {
     CarbonEnv.getInstance(context).carbonCatalog.lookupRelation2(tableIdentifier, None)(sqlContext)
     .asInstanceOf[CarbonRelation]
+  }
 
   def schema: StructType = carbonRelation.schema
 
@@ -165,24 +167,29 @@ case class CarbonRelation(schemaName: String,
     }).mkString(",")
   }
 
-  override def newInstance(): LogicalPlan =
+  override def newInstance(): LogicalPlan = {
     CarbonRelation(schemaName, cubeName, metaData, cubeMeta, alias)(sqlContext)
     .asInstanceOf[this.type]
+  }
 
   val dimensionsAttr = {
     val sett = new LinkedHashSet(
       cubeMeta.carbonTable.getDimensionByTableName(cubeMeta.carbonTableIdentifier.getTableName)
       .asScala.toSeq.asJava)
     sett.asScala.toSeq.map(dim => {
-      val output: DataType = metaData.carbonTable
-                             .getDimensionByName(metaData.carbonTable.getFactTableName, dim.getColName).getDataType()
-                             .toString.toLowerCase match {
-        case "array" => CarbonMetastoreTypes
-                        .toDataType(s"array<${getArrayChildren(dim.getColName)}>")
-        case "struct" => CarbonMetastoreTypes
-                         .toDataType(s"struct<${getStructChildren(dim.getColName)}>")
-        case dType => CarbonMetastoreTypes.toDataType(dType)
-      }
+      val output: DataType =
+        if (dim.hasEncoding(Encoding.DICTIONARY)
+            && !sqlContext.asInstanceOf[CarbonContext].pushaggregation) {
+          IntegerType
+        } else {
+          dim.getDataType().toString.toLowerCase match {
+            case "array" => CarbonMetastoreTypes
+                            .toDataType(s"array<${getArrayChildren(dim.getColName)}>")
+            case "struct" => CarbonMetastoreTypes
+                             .toDataType(s"struct<${getStructChildren(dim.getColName)}>")
+            case dType => CarbonMetastoreTypes.toDataType(dType)
+          }
+        }
 
       AttributeReference(
         dim.getColName,
@@ -212,13 +219,14 @@ case class CarbonRelation(schemaName: String,
   // TODO: Use data from the footers.
   override lazy val statistics = Statistics(sizeInBytes = sqlContext.conf.defaultSizeInBytes)
 
-  override def equals(other: Any): Boolean = other match {
-    case p: CarbonRelation =>
-      p.schemaName == schemaName && p.output == output && p.cubeName == cubeName
-    case _ => false
+  override def equals(other: Any): Boolean = {
+    other match {
+      case p: CarbonRelation =>
+        p.schemaName == schemaName && p.output == output && p.cubeName == cubeName
+      case _ => false
+    }
   }
 
 }
-
 
 

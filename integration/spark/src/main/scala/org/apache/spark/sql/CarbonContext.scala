@@ -27,7 +27,7 @@ import org.apache.spark.sql.hive._
 
 import org.carbondata.common.logging.LogServiceFactory
 import org.carbondata.core.util.CarbonProperties
-import org.carbondata.integration.spark.rdd.CarbonDataFrameRDD
+import org.carbondata.integration.spark.rdd.{CarbonDataFrameRDD, CarbonDictionaryDecodeRDD}
 import org.carbondata.integration.spark.util.CarbonSparkInterFaceLogEvent
 
 class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveContext(sc) {
@@ -44,6 +44,17 @@ class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveCon
   override protected[sql] lazy val analyzer = new Analyzer(catalog, functionRegistry, conf)
 
   override protected[sql] def dialectClassName = classOf[CarbonSQLDialect].getCanonicalName
+
+  val pushaggregation = {
+    val pushAgg = {
+      try {
+        sc.getConf.get("spark.carbon.push.aggregation")
+      } catch {
+        case _ => null
+      }
+    }
+    !(pushAgg != null && pushAgg.equalsIgnoreCase("false"))
+  }
 
   experimental.extraStrategies = CarbonStrategy.getStrategy(self) :: Nil
 
