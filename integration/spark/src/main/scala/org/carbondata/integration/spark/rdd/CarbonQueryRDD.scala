@@ -69,11 +69,6 @@ class CarbonSparkPartition(rddId: Int, val idx: Int,
   baseStoreLocation: String)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
-  private val jobtrackerId: String = {
-    val formatter = new SimpleDateFormat("yyyyMMddHHmm")
-    formatter.format(new Date())
-  }
-
   override def getPartitions: Array[Partition] = {
 
     val (carbonInputFormat: CarbonInputFormat[RowResult], job: Job) =

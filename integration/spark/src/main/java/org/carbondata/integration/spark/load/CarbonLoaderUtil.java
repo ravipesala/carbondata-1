@@ -52,7 +52,6 @@ import org.carbondata.core.carbon.CarbonDef.AggLevel;
 import org.carbondata.core.carbon.CarbonDef.AggMeasure;
 import org.carbondata.core.carbon.CarbonDef.AggName;
 import org.carbondata.core.carbon.CarbonDef.AggTable;
-import org.carbondata.core.carbon.CarbonDef.CubeDimension;
 import org.carbondata.core.carbon.CarbonDef.Schema;
 import org.carbondata.core.carbon.CarbonTableIdentifier;
 import org.carbondata.core.carbon.datastore.block.TableBlockInfo;
@@ -82,8 +81,6 @@ import org.carbondata.processing.api.dataloader.SchemaInfo;
 import org.carbondata.processing.csvload.DataGraphExecuter;
 import org.carbondata.processing.dataprocessor.DataProcessTaskStatus;
 import org.carbondata.processing.dataprocessor.IDataProcessStatus;
-import org.carbondata.processing.globalsurrogategenerator.GlobalSurrogateGenerator;
-import org.carbondata.processing.globalsurrogategenerator.GlobalSurrogateGeneratorInfo;
 import org.carbondata.processing.graphgenerator.GraphGenerator;
 import org.carbondata.processing.graphgenerator.GraphGeneratorException;
 import org.carbondata.processing.util.CarbonDataProcessorUtil;
@@ -669,21 +666,6 @@ public final class CarbonLoaderUtil {
     } finally {
       CarbonUtil.closeStreams(dataInputStream, dataOutputStream);
     }
-  }
-
-  public static void generateGlobalSurrogates(CarbonLoadModel loadModel, String storeLocation,
-      int numberOfPartiiton, String[] partitionColumn, CubeDimension[] dims,
-      int currentRestructNumber) {
-    GlobalSurrogateGeneratorInfo generatorInfo = new GlobalSurrogateGeneratorInfo();
-    generatorInfo.setCubeName(loadModel.getTableName());
-    generatorInfo.setSchema(loadModel.getSchema());
-    generatorInfo.setStoreLocation(storeLocation);
-    generatorInfo.setTableName(loadModel.getTableName());
-    generatorInfo.setNumberOfPartition(numberOfPartiiton);
-    generatorInfo.setPartiontionColumnName(partitionColumn[0]);
-    generatorInfo.setCubeDimensions(dims);
-    GlobalSurrogateGenerator generator = new GlobalSurrogateGenerator(generatorInfo);
-    generator.generateGlobalSurrogates(currentRestructNumber);
   }
 
   private static void renameFactFile(String localStoreLocation) {
