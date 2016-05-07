@@ -33,10 +33,12 @@ object CarbonSQLConf {
   */
 class CarbonSQLConf extends SQLConf {
 
-  private[spark] override def dialect: String = {
+  override def dialect: String = {
     getConf(SQLConf.DIALECT,
       classOf[CarbonSQLDialect].getCanonicalName)
   }
+
+  override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
 
   import CarbonSQLConf._
 
