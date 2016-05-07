@@ -20,7 +20,9 @@ package org.apache.spark.sql
 import scala.language.implicitConversions
 
 import org.apache.spark.SparkContext
+import org.apache.spark.sql.analysis.CarbonOptimizer
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
+import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.cubemodel.PartitionData
 import org.apache.spark.sql.hive._
@@ -42,13 +44,17 @@ class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveCon
     new CarbonMetastoreCatalog(this, storePath, metadataHive) with OverrideCatalog
 
   @transient
-  override protected[sql] lazy val analyzer = new CarbonAnalyzer(catalog, functionRegistry, conf)
+  override protected[sql] lazy val analyzer = new Analyzer(catalog, functionRegistry, conf)
+
+  @transient
+  override protected[sql] lazy val optimizer: Optimizer =
+    new CarbonOptimizer(DefaultOptimizer, conf)
 
   override def executePlan(plan: LogicalPlan): this.QueryExecution = new this.QueryExecution(plan)
 
   override protected[sql] def dialectClassName = classOf[CarbonSQLDialect].getCanonicalName
 
-  experimental.extraStrategies = CarbonStrategy.getStrategy(self) :: Nil
+  experimental.extraStrategies = CarbonStrategy.getStrategy(self)
 
   override def sql(sql: String): SchemaRDD = {
     // queryId will be unique for each query, creting query detail holder

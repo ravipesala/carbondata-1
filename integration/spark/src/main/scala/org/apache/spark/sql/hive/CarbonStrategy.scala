@@ -21,12 +21,13 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 private[sql] object CarbonStrategy {
-  def getStrategy(context: SQLContext): Strategy = {
+  def getStrategy(context: SQLContext): Seq[Strategy] = {
+    val carbonStrategy = new CarbonStrategies(context)
     if (context.conf.asInstanceOf[CarbonSQLConf].pushComputation) {
-      new CarbonStrategies(context).CarbonCubeScans
+      Seq(carbonStrategy.CarbonCubeScans, carbonStrategy.DDLStrategies)
     } else {
       // TODO: need to remove duplicate code in strategies.
-      new CarbonRawStrategies(context).CarbonRawCubeScans
+      Seq(new CarbonRawStrategies(context).CarbonRawCubeScans, carbonStrategy.DDLStrategies)
     }
   }
 }

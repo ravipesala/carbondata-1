@@ -42,7 +42,7 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
   val LOGGER = LogServiceFactory.getLogService("CarbonStrategies")
 
   def getStrategies: Seq[Strategy] = {
-    val total = sqlContext.planner.strategies :+ CarbonCubeScans
+    val total = sqlContext.planner.strategies :+ CarbonCubeScans :+ DDLStrategies
     total
   }
 
@@ -151,53 +151,7 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
           condition)
         condition.map(Filter(_, pushedDownJoin)).getOrElse(pushedDownJoin) :: Nil
 
-      case ShowCubeCommand(schemaName) =>
-        ExecutedCommand(ShowAllCubesInSchema(schemaName, plan.output)) :: Nil
-      case c@ShowAllCubeCommand() =>
-        ExecutedCommand(ShowAllCubes(plan.output)) :: Nil
-      case ShowCreateCubeCommand(cm) =>
-        ExecutedCommand(ShowCreateCube(cm, plan.output)) :: Nil
-      case ShowTablesDetailedCommand(schemaName) =>
-        ExecutedCommand(ShowAllTablesDetail(schemaName, plan.output)) :: Nil
-      case ShowAggregateTablesCommand(schemaName) =>
-        ExecutedCommand(ShowAggregateTables(schemaName, plan.output)) :: Nil
-      case ShowLoadsCommand(schemaName, cube, limit) =>
-        ExecutedCommand(ShowLoads(schemaName, cube, limit, plan.output)) :: Nil
-      case LoadCube(schemaNameOp, cubeName, factPathFromUser, dimFilesPath,
-        partionValues, isOverwriteExist, inputSqlString) =>
-        val isCarbonTable = CarbonEnv.getInstance(sqlContext).carbonCatalog
-          .cubeExists(schemaNameOp, cubeName)(sqlContext);
-        if (isCarbonTable) {
-          ExecutedCommand(LoadCube(schemaNameOp, cubeName, factPathFromUser,
-            dimFilesPath, partionValues, isOverwriteExist, inputSqlString)) :: Nil
-        } else {
-          ExecutedCommand(HiveNativeCommand(inputSqlString)) :: Nil
-        }
-      case DescribeFormattedCommand(sql, tblIdentifier) =>
-        val isCube = CarbonEnv.getInstance(sqlContext).carbonCatalog
-          .cubeExists(tblIdentifier)(sqlContext);
-        if (isCube) {
-          val describe = LogicalDescribeCommand(UnresolvedRelation(tblIdentifier, None), false)
-          val resolvedTable = sqlContext.executePlan(describe.table).analyzed
-          val resultPlan = sqlContext.executePlan(resolvedTable).executedPlan
-          ExecutedCommand(DescribeCommandFormatted(resultPlan, plan.output, tblIdentifier)) :: Nil
-        }
-        else {
-          ExecutedCommand(DescribeNativeCommand(sql, plan.output)) :: Nil
-        }
-      case describe@LogicalDescribeCommand(table, isExtended) =>
-        val resolvedTable = sqlContext.executePlan(describe.table).analyzed
-        resolvedTable match {
-          case t: MetastoreRelation =>
-            ExecutedCommand(DescribeHiveTableCommand(t, describe.output, describe.isExtended)) ::
-              Nil
-          case o: LogicalPlan =>
-            val resultPlan = sqlContext.executePlan(o).executedPlan
-            ExecutedCommand(
-              RunnableDescribeCommand(resultPlan, describe.output, describe.isExtended)) :: Nil
-        }
-      case _ =>
-        Nil
+      case _ => Nil
     }
 
     def handleAggregation(plan: LogicalPlan,
@@ -356,6 +310,58 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
         case others => others
       }
       (a, b, c, aliases, groupExprs, substitutesortExprs, limitExpr)
+    }
+  }
+
+  object DDLStrategies extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ShowCubeCommand(schemaName) =>
+        ExecutedCommand(ShowAllCubesInSchema(schemaName, plan.output)) :: Nil
+      case c@ShowAllCubeCommand() =>
+        ExecutedCommand(ShowAllCubes(plan.output)) :: Nil
+      case ShowCreateCubeCommand(cm) =>
+        ExecutedCommand(ShowCreateCube(cm, plan.output)) :: Nil
+      case ShowTablesDetailedCommand(schemaName) =>
+        ExecutedCommand(ShowAllTablesDetail(schemaName, plan.output)) :: Nil
+      case ShowAggregateTablesCommand(schemaName) =>
+        ExecutedCommand(ShowAggregateTables(schemaName, plan.output)) :: Nil
+      case ShowLoadsCommand(schemaName, cube, limit) =>
+        ExecutedCommand(ShowLoads(schemaName, cube, limit, plan.output)) :: Nil
+      case LoadCube(schemaNameOp, cubeName, factPathFromUser, dimFilesPath,
+      partionValues, isOverwriteExist, inputSqlString) =>
+        val isCarbonTable = CarbonEnv.getInstance(sqlContext).carbonCatalog
+                            .cubeExists(schemaNameOp, cubeName)(sqlContext);
+        if (isCarbonTable) {
+          ExecutedCommand(LoadCube(schemaNameOp, cubeName, factPathFromUser,
+            dimFilesPath, partionValues, isOverwriteExist, inputSqlString)) :: Nil
+        } else {
+          ExecutedCommand(HiveNativeCommand(inputSqlString)) :: Nil
+        }
+      case DescribeFormattedCommand(sql, tblIdentifier) =>
+        val isCube = CarbonEnv.getInstance(sqlContext).carbonCatalog
+                     .cubeExists(tblIdentifier)(sqlContext);
+        if (isCube) {
+          val describe = LogicalDescribeCommand(UnresolvedRelation(tblIdentifier, None), false)
+          val resolvedTable = sqlContext.executePlan(describe.table).analyzed
+          val resultPlan = sqlContext.executePlan(resolvedTable).executedPlan
+          ExecutedCommand(DescribeCommandFormatted(resultPlan, plan.output, tblIdentifier)) :: Nil
+        }
+        else {
+          ExecutedCommand(DescribeNativeCommand(sql, plan.output)) :: Nil
+        }
+      case describe@LogicalDescribeCommand(table, isExtended) =>
+        val resolvedTable = sqlContext.executePlan(describe.table).analyzed
+        resolvedTable match {
+          case t: MetastoreRelation =>
+            ExecutedCommand(DescribeHiveTableCommand(t, describe.output, describe.isExtended)) ::
+              Nil
+          case o: LogicalPlan =>
+            val resultPlan = sqlContext.executePlan(o).executedPlan
+            ExecutedCommand(
+              RunnableDescribeCommand(resultPlan, describe.output, describe.isExtended)) :: Nil
+        }
+      case _ =>
+        Nil
     }
   }
 
