@@ -101,6 +101,7 @@ public class CarbonInputFormatUtil {
     queryModel.setSortOrder(new byte[0]);
     queryModel.setSortDimension(new ArrayList<QueryDimension>(0));
     queryModel.setLimit(-1);
+    queryModel.setTable(carbonTable);
 
     // fill measures
     List<CarbonMeasure> carbonMeasures = tableMsrs;
