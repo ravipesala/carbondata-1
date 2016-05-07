@@ -15,34 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql
 
-import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.SQLConf.SQLConfEntry
+import org.apache.spark.sql.hive.CarbonSQLDialect
 
-private[sql] object CarbonStrategy {
-  def getStrategy(context: SQLContext): Strategy = {
-    if (context.conf.asInstanceOf[CarbonSQLConf].pushComputation) {
-      new CarbonStrategies(context).CarbonCubeScans
-    } else {
-      // TODO: need to remove duplicate code in strategies.
-      new CarbonRawStrategies(context).CarbonRawCubeScans
-    }
-  }
+object CarbonSQLConf {
+
+  val PUSH_COMPUTATION = SQLConfEntry.booleanConf("spark.sql.carbon.push.computation",
+    defaultValue = Some(true))
+
 }
 
-private[spark] class CarbonSQLDialect extends HiveQLDialect {
+ /**
+  * A trait that enables the setting and getting of mutable config parameters/hints.
+  *
+  */
+class CarbonSQLConf extends SQLConf {
 
-  @transient
-  protected val sqlParser = new CarbonSqlParser
-
-  override def parse(sqlText: String): LogicalPlan = {
-
-    try {
-      sqlParser.parse(sqlText)
-    } catch {
-      case _ => super.parse(sqlText)
-      case x: Throwable => throw x
-    }
+  private[spark] override def dialect: String = {
+    getConf(SQLConf.DIALECT,
+      classOf[CarbonSQLDialect].getCanonicalName)
   }
+
+  import CarbonSQLConf._
+
+  private[sql] def pushComputation: Boolean = getConf(PUSH_COMPUTATION)
+
 }

@@ -8,20 +8,19 @@ import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
 import org.carbondata.query.carbon.executor.internal.InternalQueryExecutor;
 import org.carbondata.query.carbon.executor.internal.impl.InternalDetailQueryExecutor;
 import org.carbondata.query.carbon.model.QueryModel;
-import org.carbondata.query.carbon.result.iterator.ChunkRawRowIterartor;
+import org.carbondata.query.carbon.result.BatchRawResult;
 import org.carbondata.query.carbon.result.iterator.DetailRawQueryResultIterator;
 
 /**
  * Created by root1 on 28/4/16.
  */
-public class DetailRawRecordQueryExcecutor extends AbstractQueryExecutor<Object[]> {
+public class DetailRawRecordQueryExcecutor extends AbstractQueryExecutor<BatchRawResult> {
 
-  @Override public CarbonIterator<Object[]> execute(QueryModel queryModel)
+  @Override public CarbonIterator<BatchRawResult> execute(QueryModel queryModel)
       throws QueryExecutionException {
     List<BlockExecutionInfo> blockExecutionInfoList = getBlockExecutionInfos(queryModel);
     InternalQueryExecutor queryExecutor = new InternalDetailQueryExecutor();
-    return new ChunkRawRowIterartor(
-        new DetailRawQueryResultIterator(blockExecutionInfoList, queryProperties, queryModel,
-            queryExecutor));
+    return new DetailRawQueryResultIterator(blockExecutionInfoList, queryProperties, queryModel,
+        queryExecutor);
   }
 }

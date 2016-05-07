@@ -35,25 +35,18 @@ class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveCon
 
   var lastSchemaUpdatedTime = System.currentTimeMillis()
 
+  protected[sql] override lazy val conf: SQLConf = new CarbonSQLConf
+
   @transient
   override lazy val catalog =
     new CarbonMetastoreCatalog(this, storePath, metadataHive) with OverrideCatalog
 
   @transient
-  override protected[sql] lazy val analyzer = new Analyzer(catalog, functionRegistry, conf)
+  override protected[sql] lazy val analyzer = new CarbonAnalyzer(catalog, functionRegistry, conf)
+
+  override def executePlan(plan: LogicalPlan): this.QueryExecution = new this.QueryExecution(plan)
 
   override protected[sql] def dialectClassName = classOf[CarbonSQLDialect].getCanonicalName
-
-  val pushaggregation = {
-    val pushAgg = {
-      try {
-        sc.getConf.get("spark.carbon.push.aggregation")
-      } catch {
-        case _ => null
-      }
-    }
-    !(pushAgg != null && pushAgg.equalsIgnoreCase("false"))
-  }
 
   experimental.extraStrategies = CarbonStrategy.getStrategy(self) :: Nil
 

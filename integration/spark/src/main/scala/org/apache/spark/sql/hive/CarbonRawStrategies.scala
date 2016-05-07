@@ -61,52 +61,18 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         partialComputation,
         PhysicalOperation(projectList, predicates,
         l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _))) =>
-          val s = carbonScan(projectList, predicates, carbonRelation.carbonRelation, false)
+          val s = carbonScan(projectList, predicates, carbonRelation.carbonRelation, false, true)
           Aggregate(
               partial = false,
               namedGroupingAttributes,
               rewrittenAggregateExpressions,
-              Aggregate(
+            CarbonRawAggregate(
                 partial = true,
                 groupingExpressions,
                 partialComputation,
                 s)) :: Nil
-
-        case ShowCubeCommand(schemaName) =>
-          ExecutedCommand(ShowAllCubesInSchema(schemaName, plan.output)) :: Nil
-        case c@ShowAllCubeCommand() =>
-          ExecutedCommand(ShowAllCubes(plan.output)) :: Nil
-        case ShowCreateCubeCommand(cm) =>
-          ExecutedCommand(ShowCreateCube(cm, plan.output)) :: Nil
-        case ShowTablesDetailedCommand(schemaName) =>
-          ExecutedCommand(ShowAllTablesDetail(schemaName, plan.output)) :: Nil
-        case ShowAggregateTablesCommand(schemaName) =>
-          ExecutedCommand(ShowAggregateTables(schemaName, plan.output)) :: Nil
-        case ShowLoadsCommand(schemaName, cube, limit) =>
-          ExecutedCommand(ShowLoads(schemaName, cube, limit, plan.output)) :: Nil
-        case DescribeFormattedCommand(sql, tblIdentifier) =>
-          val isCube = CarbonEnv.getInstance(sqlContext).carbonCatalog
-                       .cubeExists(tblIdentifier)(sqlContext);
-          if (isCube) {
-            val describe = LogicalDescribeCommand(UnresolvedRelation(tblIdentifier, None), false)
-            val resolvedTable = sqlContext.executePlan(describe.table).analyzed
-            val resultPlan = sqlContext.executePlan(resolvedTable).executedPlan
-            ExecutedCommand(DescribeCommandFormatted(resultPlan, plan.output, tblIdentifier)) :: Nil
-          }
-          else {
-            ExecutedCommand(DescribeNativeCommand(sql, plan.output)) :: Nil
-          }
-        case describe@LogicalDescribeCommand(table, isExtended) =>
-          val resolvedTable = sqlContext.executePlan(describe.table).analyzed
-          resolvedTable match {
-            case t: MetastoreRelation =>
-              ExecutedCommand(DescribeHiveTableCommand(t, describe.output, describe.isExtended)) ::
-              Nil
-            case o: LogicalPlan =>
-              val resultPlan = sqlContext.executePlan(o).executedPlan
-              ExecutedCommand(
-                RunnableDescribeCommand(resultPlan, describe.output, describe.isExtended)) :: Nil
-          }
+        case CarbonDictionaryCatalystDecoder(relation, child) =>
+          CarbonDictionaryDecoder(relation.carbonRelation, planLater(child))(sqlContext) :: Nil
         case _ =>
           Nil
       }
@@ -151,21 +117,24 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
     private def carbonScan(projectList: Seq[NamedExpression],
                            predicates: Seq[Expression],
                            relation: CarbonRelation,
-                           detailQuery: Boolean = true) = {
+                           detailQuery: Boolean = true,
+                           useBinaryAggregator: Boolean = false) = {
 
       if (detailQuery == false) {
         val projectSet = AttributeSet(projectList.flatMap(_.references))
         CarbonRawCubeScan(
           projectSet.toSeq,
           relation,
-          predicates)(sqlContext)
+          predicates,
+          useBinaryAggregator)(sqlContext)
       }
       else {
         val projectSet = AttributeSet(projectList.flatMap(_.references))
         Project(projectList,
           CarbonRawCubeScan(projectSet.toSeq,
             relation,
-            predicates)(sqlContext))
+            predicates,
+            useBinaryAggregator)(sqlContext))
 
       }
     }

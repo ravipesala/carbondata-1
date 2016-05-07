@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, EOFException, File, ObjectInputStream}
+import java.io._
 import java.net.{InetAddress, InterfaceAddress, NetworkInterface}
 import java.util.{GregorianCalendar, HashMap}
 
@@ -57,12 +57,17 @@ import org.carbondata.processing.util.CarbonDataProcessorUtil
 
 case class MetaData(var cubesMeta: ArrayBuffer[TableMeta])
 
-case class CarbonMetaData(dims: Seq[String], msrs: Seq[String], carbonTable: CarbonTable,
-                          cube: Cube = null)
+case class CarbonMetaData(dims: Seq[String],
+  msrs: Seq[String],
+  carbonTable: CarbonTable,
+  dictionaryMap: Map[String, Boolean])
 
-case class TableMeta(carbonTableIdentifier: CarbonTableIdentifier, dataPath: String,
-                     carbonTable: CarbonTable, partitioner: Partitioner,
-                     schema: CarbonDef.Schema = null, var cube: Cube = null)
+case class TableMeta(carbonTableIdentifier: CarbonTableIdentifier,
+  dataPath: String,
+  carbonTable: CarbonTable,
+  partitioner: Partitioner,
+  schema: CarbonDef.Schema = null,
+  var cube: Cube = null)
 
 object CarbonMetastoreCatalog {
 

@@ -25,6 +25,7 @@ import org.apache.spark.sql.hive.CarbonMetaData
 import org.apache.spark.sql.types._
 
 import org.carbondata.core.carbon.metadata.datatype.DataType
+import org.carbondata.core.carbon.metadata.encoder.Encoding
 import org.carbondata.core.carbon.metadata.schema.table.CarbonTable
 import org.carbondata.core.constants.CarbonCommonConstants
 import org.carbondata.query.expression.{DataType => CarbonDataType}
@@ -120,7 +121,12 @@ object CarbonScalaUtil {
         .asScala.map(x => x.getColName) // wf : may be problem
       val measureAttr = carbonTable.getMeasureByTableName(carbonTable.getFactTableName)
           .asScala.map(x => x.getColName)
-      CarbonMetaData(dimensionsAttr, measureAttr, carbonTable)
+      val dictionaryMap = carbonTable
+                          .getDimensionByTableName(carbonTable.getFactTableName)
+                          .asScala.map { f =>
+                            (f.getColName, f.hasEncoding(Encoding.DICTIONARY))
+                          }.toMap
+      CarbonMetaData(dimensionsAttr, measureAttr, carbonTable, dictionaryMap)
     }
 
   }

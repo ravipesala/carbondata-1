@@ -4,14 +4,13 @@ import java.util.List;
 
 import org.carbondata.common.logging.LogService;
 import org.carbondata.common.logging.LogServiceFactory;
-import org.carbondata.core.carbon.metadata.encoder.Encoding;
 import org.carbondata.core.constants.CarbonCommonConstants;
-import org.carbondata.core.util.CarbonUtil;
 import org.carbondata.query.aggregator.MeasureAggregator;
 import org.carbondata.query.carbon.executor.impl.QueryExecutorProperties;
 import org.carbondata.query.carbon.model.QueryDimension;
 import org.carbondata.query.carbon.model.QueryMeasure;
 import org.carbondata.query.carbon.model.QueryModel;
+import org.carbondata.query.carbon.model.QuerySchemaInfo;
 import org.carbondata.query.carbon.result.BatchRawResult;
 import org.carbondata.query.carbon.result.Result;
 import org.carbondata.query.carbon.util.DataTypeUtil;
@@ -19,93 +18,85 @@ import org.carbondata.query.carbon.wrappers.ByteArrayWrapper;
 import org.carbondata.query.util.CarbonEngineLogEvent;
 
 /**
- * Created by root1 on 28/4/16.
+ * It does not decode the dictionary.
  */
 public class RawQueryResultPreparatorImpl extends AbstractQueryResultPreparator<BatchRawResult> {
 
   private static final LogService LOGGER =
       LogServiceFactory.getLogService(RawQueryResultPreparatorImpl.class.getName());
 
+  private QuerySchemaInfo querySchemaInfo;
+
   public RawQueryResultPreparatorImpl(QueryExecutorProperties executerProperties,
       QueryModel queryModel) {
     super(executerProperties, queryModel);
+    querySchemaInfo = new QuerySchemaInfo();
+    querySchemaInfo.setKeyGenerator(queryExecuterProperties.keyStructureInfo.getKeyGenerator());
+    querySchemaInfo.setMaskedByteIndexes(queryExecuterProperties.keyStructureInfo.getMaskedBytes());
+    querySchemaInfo.setQueryDimensions(queryModel.getQueryDimension()
+        .toArray(new QueryDimension[queryModel.getQueryDimension().size()]));
+    querySchemaInfo.setQueryMeasures(queryModel.getQueryMeasures()
+        .toArray(new QueryMeasure[queryModel.getQueryMeasures().size()]));
+    int msrSize = queryExecuterProperties.measureAggregators.length;
+    int dimensionCount = queryModel.getQueryDimension().size();
+    int[] queryOrder = new int[dimensionCount + msrSize];
+    int[] queryReverseOrder = new int[dimensionCount + msrSize];
+    for (int i = 0; i < dimensionCount; i++) {
+      queryOrder[queryModel.getQueryDimension().get(i).getQueryOrder()] = i;
+      queryReverseOrder[i] = queryModel.getQueryDimension().get(i).getQueryOrder();
+    }
+    for (int i = 0; i < msrSize; i++) {
+      queryOrder[queryModel.getQueryMeasures().get(i).getQueryOrder()] = i + dimensionCount;
+      queryReverseOrder[i + dimensionCount] = queryModel.getQueryMeasures().get(i).getQueryOrder();
+    }
+    querySchemaInfo.setQueryOrder(queryOrder);
+    querySchemaInfo.setQueryReverseOrder(queryReverseOrder);
   }
 
   @Override public BatchRawResult prepareQueryResult(Result scannedResult) {
     if ((null == scannedResult || scannedResult.size() < 1)) {
       return new BatchRawResult(new Object[0][0]);
     }
-    List<QueryDimension> queryDimension = queryModel.getQueryDimension();
-    int dimensionCount = queryDimension.size();
-    int totalNumberOfColumn = dimensionCount + queryExecuterProperties.measureAggregators.length;
+    List<QueryDimension> queryDimensions = queryModel.getQueryDimension();
+    int dimensionCount = queryDimensions.size();
+    int msrSize = queryExecuterProperties.measureAggregators.length;
+    int totalNumberOfColumn = 1 + msrSize;
     Object[][] resultData = new Object[scannedResult.size()][totalNumberOfColumn];
     int currentRow = 0;
-    long[] surrogateResult = null;
-    int noDictionaryColumnIndex = 0;
     ByteArrayWrapper key = null;
     MeasureAggregator[] value = null;
     while (scannedResult.hasNext()) {
       key = scannedResult.getKey();
       value = scannedResult.getValue();
-      surrogateResult = queryExecuterProperties.keyStructureInfo.getKeyGenerator()
-          .getKeyArray(key.getDictionaryKey(),
-              queryExecuterProperties.keyStructureInfo.getMaskedBytes());
-      for (int i = 0; i < dimensionCount; i++) {
-        if (!CarbonUtil
-            .hasEncoding(queryDimension.get(i).getDimension().getEncoder(), Encoding.DICTIONARY)) {
-          resultData[currentRow][i] = DataTypeUtil.getDataBasedOnDataType(
-              new String(key.getNoDictionaryKeyByIndex(noDictionaryColumnIndex++)),
-              queryDimension.get(i).getDimension().getDataType());
-        } else {
-          /*resultData[currentRow][i] = getKeyInBytes(key.getDictionaryKey(),
-              queryExecuterProperties.keyStructureInfo.getMaskedBytes(),
-              queryDimension.get(i).getQueryOrder(),
-              queryExecuterProperties.keyStructureInfo.getKeyGenerator()
-                  .getKeyByteOffsets(queryDimension.get(i).getKeyOrdinal()));*/
-          resultData[currentRow][i] =
-              (int) surrogateResult[queryDimension.get(i).getDimension().getKeyOrdinal()];
-        }
-      }
-
-      for (int i = 0; i < queryExecuterProperties.measureAggregators.length; i++) {
-        resultData[currentRow][dimensionCount + i] = value[i];
+      resultData[currentRow][0] = key;
+      for (int i = 0; i < msrSize; i++) {
+        resultData[currentRow][1 + i] = value[i];
       }
       currentRow++;
     }
+
     if (resultData.length > 0) {
       resultData = encodeToRows(resultData);
     }
-    return getResult(queryModel, resultData);
+    BatchRawResult result = getResult(queryModel, resultData);
+    result.setQuerySchemaInfo(querySchemaInfo);
+    return result;
   }
 
-  private byte[] getKeyInBytes(byte[] dictKey, int[] maskedBytes, int ordinal, int[] byteOffsets) {
-    int len = byteOffsets[1] - byteOffsets[0] + 1;
-    byte[] out = new byte[len];
-    int k = byteOffsets[0];
-    for (int i = 0; i < len; i++) {
-      out[i] = dictKey[maskedBytes[k++]];
-    }
-    return out;
-  }
 
   private BatchRawResult getResult(QueryModel queryModel, Object[][] convertedResult) {
 
     List<QueryDimension> queryDimensions = queryModel.getQueryDimension();
     int dimensionCount = queryDimensions.size();
     int msrCount = queryExecuterProperties.measureAggregators.length;
-    Object[][] resultDataA = new Object[dimensionCount + msrCount][convertedResult[0].length];
+    Object[][] resultDataA = new Object[1 + msrCount][convertedResult[0].length];
 
-    QueryDimension queryDimension = null;
     for (int columnIndex = 0; columnIndex < resultDataA[0].length; columnIndex++) {
-      for (int i = 0; i < dimensionCount; i++) {
-        queryDimension = queryDimensions.get(i);
-        resultDataA[queryDimension.getQueryOrder()][columnIndex] = convertedResult[i][columnIndex];
-      }
+      resultDataA[0][columnIndex] = convertedResult[0][columnIndex];
       MeasureAggregator[] msrAgg =
           new MeasureAggregator[queryExecuterProperties.measureAggregators.length];
 
-      fillMeasureValueForAggGroupByQuery(queryModel, convertedResult, dimensionCount, columnIndex,
-          msrAgg);
+      fillMeasureValueForAggGroupByQuery(queryModel, convertedResult, 1, columnIndex, msrAgg);
 
       QueryMeasure msr = null;
       for (int i = 0; i < queryModel.getQueryMeasures().size(); i++) {
@@ -113,9 +104,9 @@ public class RawQueryResultPreparatorImpl extends AbstractQueryResultPreparator<
         if (msrAgg[queryExecuterProperties.measureStartIndex + i].isFirstTime() && (
             msr.getAggregateFunction().equals(CarbonCommonConstants.COUNT) || msr
                 .getAggregateFunction().equals(CarbonCommonConstants.DISTINCT_COUNT))) {
-          resultDataA[msr.getQueryOrder()][columnIndex] = 0.0;
+          resultDataA[i + 1][columnIndex] = 0.0;
         } else if (msrAgg[queryExecuterProperties.measureStartIndex + i].isFirstTime()) {
-          resultDataA[msr.getQueryOrder()][columnIndex] = null;
+          resultDataA[i + 1][columnIndex] = null;
         } else {
           Object msrVal;
           switch (msr.getMeasure().getDataType()) {
@@ -128,7 +119,7 @@ public class RawQueryResultPreparatorImpl extends AbstractQueryResultPreparator<
             default:
               msrVal = msrAgg[queryExecuterProperties.measureStartIndex + i].getDoubleValue();
           }
-          resultDataA[msr.getQueryOrder()][columnIndex] = DataTypeUtil
+          resultDataA[i + 1][columnIndex] = DataTypeUtil
               .getMeasureDataBasedOnDataType(msrVal == null ? null : msrVal,
                   msr.getMeasure().getDataType());
         }

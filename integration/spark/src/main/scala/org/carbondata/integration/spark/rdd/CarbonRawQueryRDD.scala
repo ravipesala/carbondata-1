@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.carbondata.integration.spark.rdd
 
 import java.text.SimpleDateFormat
@@ -32,6 +31,7 @@ import org.carbondata.integration.spark.RawKeyVal
 import org.carbondata.integration.spark.util.CarbonSparkInterFaceLogEvent
 import org.carbondata.query.carbon.executor.QueryExecutorFactory
 import org.carbondata.query.carbon.model.QueryModel
+import org.carbondata.query.carbon.result.BatchRawResult
 import org.carbondata.query.expression.Expression
 
 
@@ -75,7 +75,7 @@ class CarbonRawQueryRDD[K, V](
   override def compute(thepartition: Partition, context: TaskContext): Iterator[(K, V)] = {
     val LOGGER = LogServiceFactory.getLogService(this.getClass().getName());
     val iter = new Iterator[(K, V)] {
-      var rowIterator: CarbonIterator[Array[Object]] = _
+      var rowIterator: CarbonIterator[BatchRawResult] = _
       var queryStartTime: Long = 0
       try { {
         val carbonSparkPartition = thepartition.asInstanceOf[CarbonSparkPartition]
@@ -103,7 +103,7 @@ class CarbonRawQueryRDD[K, V](
         }
         // execute query
         rowIterator = QueryExecutorFactory.getQueryExecutor(queryModel).execute(queryModel)
-                      .asInstanceOf[CarbonIterator[Array[Object]]]
+                      .asInstanceOf[CarbonIterator[BatchRawResult]]
       }
         // TODO: CarbonQueryUtil.isQuickFilter quick filter from dictionary needs to support
       } catch {

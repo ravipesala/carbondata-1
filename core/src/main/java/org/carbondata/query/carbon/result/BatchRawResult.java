@@ -19,7 +19,13 @@
 
 package org.carbondata.query.carbon.result;
 
+import org.carbondata.core.carbon.metadata.encoder.Encoding;
 import org.carbondata.core.iterator.CarbonIterator;
+import org.carbondata.core.util.CarbonUtil;
+import org.carbondata.query.carbon.model.QueryDimension;
+import org.carbondata.query.carbon.model.QuerySchemaInfo;
+import org.carbondata.query.carbon.util.DataTypeUtil;
+import org.carbondata.query.carbon.wrappers.ByteArrayWrapper;
 
 /**
  * Below class holds the query result
@@ -31,7 +37,7 @@ public class BatchRawResult implements CarbonIterator<Object[]> {
    */
   private Object[][] rows;
 
-
+  private QuerySchemaInfo querySchemaInfo;
   /**
    * counter to check whether all the records are processed or not
    */
@@ -41,7 +47,7 @@ public class BatchRawResult implements CarbonIterator<Object[]> {
 
   public BatchRawResult(Object[][] rows) {
     this.rows = rows;
-    if(rows.length > 0) {
+    if (rows.length > 0) {
       this.size = rows[0].length;
     }
   }
@@ -65,11 +71,65 @@ public class BatchRawResult implements CarbonIterator<Object[]> {
    * @return the next element in the iteration
    */
   @Override public Object[] next() {
-    Object[] row = new Object[rows.length];
-    for (int i = 0; i < rows.length; i++) {
-      row[i] = rows[i][counter];
+    return parseData();
+  }
+
+  private Object[] parseData() {
+    ByteArrayWrapper key = (ByteArrayWrapper) rows[0][counter];
+    int[] order = querySchemaInfo.getQueryReverseOrder();
+    long[] surrogateResult = querySchemaInfo.getKeyGenerator()
+        .getKeyArray(key.getDictionaryKey(), querySchemaInfo.getMaskedByteIndexes());
+    QueryDimension[] queryDimensions = querySchemaInfo.getQueryDimensions();
+    Object[] parsedData = new Object[queryDimensions.length + rows.length - 1];
+    int noDictionaryColumnIndex = 0;
+    for (int i = 0; i < queryDimensions.length; i++) {
+      if (!CarbonUtil
+          .hasEncoding(queryDimensions[i].getDimension().getEncoder(), Encoding.DICTIONARY)) {
+        parsedData[order[i]] = DataTypeUtil.getDataBasedOnDataType(
+            new String(key.getNoDictionaryKeyByIndex(noDictionaryColumnIndex++)),
+            queryDimensions[i].getDimension().getDataType());
+      } else {
+        parsedData[order[i]] =
+            (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()];
+      }
+    }
+    for (int i = 0; i < rows.length - 1; i++) {
+      parsedData[order[i + queryDimensions.length]] = rows[i + 1][counter];
     }
     counter++;
-    return row;
+    return parsedData;
+  }
+
+  public static Object[] parseData(ByteArrayWrapper key, Object[] aggData,
+      QuerySchemaInfo querySchemaInfo) {
+    int[] order = querySchemaInfo.getQueryReverseOrder();
+    long[] surrogateResult = querySchemaInfo.getKeyGenerator()
+        .getKeyArray(key.getDictionaryKey(), querySchemaInfo.getMaskedByteIndexes());
+    QueryDimension[] queryDimensions = querySchemaInfo.getQueryDimensions();
+    Object[] parsedData = new Object[queryDimensions.length + aggData.length];
+    int noDictionaryColumnIndex = 0;
+    for (int i = 0; i < queryDimensions.length; i++) {
+      if (!CarbonUtil
+          .hasEncoding(queryDimensions[i].getDimension().getEncoder(), Encoding.DICTIONARY)) {
+        parsedData[order[i]] = DataTypeUtil.getDataBasedOnDataType(
+            new String(key.getNoDictionaryKeyByIndex(noDictionaryColumnIndex++)),
+            queryDimensions[i].getDimension().getDataType());
+      } else {
+        parsedData[order[i]] =
+            (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()];
+      }
+    }
+    for (int i = 0; i < aggData.length; i++) {
+      parsedData[order[i + queryDimensions.length]] = aggData[i];
+    }
+    return parsedData;
+  }
+
+  public QuerySchemaInfo getQuerySchemaInfo() {
+    return querySchemaInfo;
+  }
+
+  public void setQuerySchemaInfo(QuerySchemaInfo querySchemaInfo) {
+    this.querySchemaInfo = querySchemaInfo;
   }
 }

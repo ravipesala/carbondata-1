@@ -179,17 +179,12 @@ case class CarbonRelation(schemaName: String,
       .asScala.toSeq.asJava)
     sett.asScala.toSeq.map(dim => {
       val output: DataType =
-        if (dim.hasEncoding(Encoding.DICTIONARY)
-            && !sqlContext.asInstanceOf[CarbonContext].pushaggregation) {
-          IntegerType
-        } else {
-          dim.getDataType().toString.toLowerCase match {
-            case "array" => CarbonMetastoreTypes
-                            .toDataType(s"array<${getArrayChildren(dim.getColName)}>")
-            case "struct" => CarbonMetastoreTypes
-                             .toDataType(s"struct<${getStructChildren(dim.getColName)}>")
-            case dType => CarbonMetastoreTypes.toDataType(dType)
-          }
+        dim.getDataType().toString.toLowerCase match {
+          case "array" => CarbonMetastoreTypes
+                          .toDataType(s"array<${getArrayChildren(dim.getColName)}>")
+          case "struct" => CarbonMetastoreTypes
+                           .toDataType(s"struct<${getStructChildren(dim.getColName)}>")
+          case dType => CarbonMetastoreTypes.toDataType(dType)
         }
 
       AttributeReference(
