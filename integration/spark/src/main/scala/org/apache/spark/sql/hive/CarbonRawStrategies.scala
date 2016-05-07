@@ -27,7 +27,7 @@ import org.apache.spark.sql.cubemodel._
 import org.apache.spark.sql.execution.{Aggregate, DescribeCommand => RunnableDescribeCommand, ExecutedCommand, Project, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{DescribeCommand => LogicalDescribeCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
+import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
 
 import org.carbondata.common.logging.LogServiceFactory
 import org.carbondata.integration.spark.util.CarbonSparkInterFaceLogEvent
@@ -73,6 +73,51 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
                 s)) :: Nil
         case CarbonDictionaryCatalystDecoder(relation, child) =>
           CarbonDictionaryDecoder(relation.carbonRelation, planLater(child))(sqlContext) :: Nil
+        case ShowCubeCommand(schemaName) =>
+          ExecutedCommand(ShowAllCubesInSchema(schemaName, plan.output)) :: Nil
+        case c@ShowAllCubeCommand() =>
+          ExecutedCommand(ShowAllCubes(plan.output)) :: Nil
+        case ShowCreateCubeCommand(cm) =>
+          ExecutedCommand(ShowCreateCube(cm, plan.output)) :: Nil
+        case ShowTablesDetailedCommand(schemaName) =>
+          ExecutedCommand(ShowAllTablesDetail(schemaName, plan.output)) :: Nil
+        case ShowAggregateTablesCommand(schemaName) =>
+          ExecutedCommand(ShowAggregateTables(schemaName, plan.output)) :: Nil
+        case ShowLoadsCommand(schemaName, cube, limit) =>
+          ExecutedCommand(ShowLoads(schemaName, cube, limit, plan.output)) :: Nil
+        case LoadCube(schemaNameOp, cubeName, factPathFromUser, dimFilesPath,
+        partionValues, isOverwriteExist, inputSqlString) =>
+          val isCarbonTable = CarbonEnv.getInstance(sqlContext).carbonCatalog
+                              .cubeExists(schemaNameOp, cubeName)(sqlContext);
+          if (isCarbonTable) {
+            ExecutedCommand(LoadCube(schemaNameOp, cubeName, factPathFromUser,
+              dimFilesPath, partionValues, isOverwriteExist, inputSqlString)) :: Nil
+          } else {
+            ExecutedCommand(HiveNativeCommand(inputSqlString)) :: Nil
+          }
+        case DescribeFormattedCommand(sql, tblIdentifier) =>
+          val isCube = CarbonEnv.getInstance(sqlContext).carbonCatalog
+                       .cubeExists(tblIdentifier)(sqlContext);
+          if (isCube) {
+            val describe = LogicalDescribeCommand(UnresolvedRelation(tblIdentifier, None), false)
+            val resolvedTable = sqlContext.executePlan(describe.table).analyzed
+            val resultPlan = sqlContext.executePlan(resolvedTable).executedPlan
+            ExecutedCommand(DescribeCommandFormatted(resultPlan, plan.output, tblIdentifier)) :: Nil
+          }
+          else {
+            ExecutedCommand(DescribeNativeCommand(sql, plan.output)) :: Nil
+          }
+        case describe@LogicalDescribeCommand(table, isExtended) =>
+          val resolvedTable = sqlContext.executePlan(describe.table).analyzed
+          resolvedTable match {
+            case t: MetastoreRelation =>
+              ExecutedCommand(DescribeHiveTableCommand(t, describe.output, describe.isExtended)) ::
+                Nil
+            case o: LogicalPlan =>
+              val resultPlan = sqlContext.executePlan(o).executedPlan
+              ExecutedCommand(
+                RunnableDescribeCommand(resultPlan, describe.output, describe.isExtended)) :: Nil
+          }
         case _ =>
           Nil
       }

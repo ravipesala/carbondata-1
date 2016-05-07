@@ -25,7 +25,6 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
-import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -34,6 +33,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import org.carbondata.core.cache.Cache;
+import org.carbondata.core.cache.CacheProvider;
+import org.carbondata.core.cache.CacheType;
+import org.carbondata.core.cache.dictionary.Dictionary;
+import org.carbondata.core.cache.dictionary.DictionaryColumnUniqueIdentifier;
 import org.carbondata.core.carbon.AbsoluteTableIdentifier;
 import org.carbondata.core.carbon.CarbonDataLoadSchema;
 import org.carbondata.core.carbon.CarbonTableIdentifier;
@@ -79,8 +83,6 @@ import org.carbondata.processing.graphgenerator.GraphGeneratorException;
 import org.carbondata.processing.util.CarbonDataProcessorUtil;
 
 import com.google.gson.Gson;
-
-import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 /**
  * This class will create store file based on provided schema
@@ -283,6 +285,8 @@ public class StoreCreator {
       line = reader.readLine();
     }
 
+    Cache dictCache = CacheProvider.getInstance()
+        .createCache(CacheType.REVERSE_DICTIONARY, absoluteTableIdentifier.getStorePath());
     for (int i = 0; i < set.length; i++) {
       CarbonDictionaryWriter writer =
           new CarbonDictionaryWriterImpl(absoluteTableIdentifier.getStorePath(),
@@ -292,11 +296,14 @@ public class StoreCreator {
       }
       writer.close();
 
+      Dictionary dict = (Dictionary) dictCache.get(
+          new DictionaryColumnUniqueIdentifier(absoluteTableIdentifier.getCarbonTableIdentifier(),
+              dims.get(i).getColumnId(), dims.get(i).getDataType()));
       CarbonDictionarySortInfoPreparator preparator =
           new CarbonDictionarySortInfoPreparator(absoluteTableIdentifier.getStorePath(),
               absoluteTableIdentifier.getCarbonTableIdentifier());
-      CarbonDictionarySortInfo dictionarySortInfo = preparator
-          .getDictionarySortInfo(null, new ArrayList<String>(set[i]), dims.get(i).getDataType());
+      CarbonDictionarySortInfo dictionarySortInfo =
+          preparator.getDictionarySortInfo(dict, dims.get(i).getDataType());
       CarbonDictionarySortIndexWriter carbonDictionaryWriter =
           new CarbonDictionarySortIndexWriterImpl(
               absoluteTableIdentifier.getCarbonTableIdentifier(), dims.get(i).getColumnId(),
@@ -376,20 +383,21 @@ public class StoreCreator {
     writeLoadMetadata(loadModel.schema, loadModel.getCubeName(), loadModel.getTableName(),
         new ArrayList<LoadMetadataDetails>());
 
-    String segLocation = storeLocation+"/"+schemaName+"/"+"/"+tableName+"/Fact/Part0/Segment_0";
+    String segLocation =
+        storeLocation + "/" + schemaName + "/" + "/" + tableName + "/Fact/Part0/Segment_0";
     File file = new File(segLocation);
     File factFile = null;
     File folder = file.listFiles()[0];
-    if(folder.isDirectory()) {
+    if (folder.isDirectory()) {
       File[] files = folder.listFiles();
       for (int i = 0; i < file.length(); i++) {
-        if(!files[i].isDirectory() && files[i].getName().startsWith("part")) {
+        if (!files[i].isDirectory() && files[i].getName().startsWith("part")) {
           factFile = files[i];
           break;
         }
       }
-//      Files.copy(factFile.toPath(), file.toPath(), REPLACE_EXISTING);
-      factFile.renameTo(new File(segLocation+"/"+factFile.getName()));
+      //      Files.copy(factFile.toPath(), file.toPath(), REPLACE_EXISTING);
+      factFile.renameTo(new File(segLocation + "/" + factFile.getName()));
       CarbonUtil.deleteFoldersAndFiles(folder);
     }
   }
