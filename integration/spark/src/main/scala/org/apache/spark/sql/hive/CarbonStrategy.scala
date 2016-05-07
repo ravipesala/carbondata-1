@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{CarbonSqlParser, CarbonContext, SQLContext, Strategy}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 import org.carbondata.spark.exception.MalformedCarbonCommandException
 
 private[sql] object CarbonStrategy {
   def getStrategy(context: SQLContext): Strategy = {
-    if (context.asInstanceOf[CarbonContext].pushaggregation) {
+    if (context.conf.asInstanceOf[CarbonSQLConf].pushComputation) {
       new CarbonStrategies(context).CarbonCubeScans
     } else {
       // TODO: need to remove duplicate code in strategies.

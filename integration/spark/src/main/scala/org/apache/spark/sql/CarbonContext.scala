@@ -35,6 +35,8 @@ class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveCon
 
   var lastSchemaUpdatedTime = System.currentTimeMillis()
 
+  protected[sql] override lazy val conf: SQLConf = new CarbonSQLConf
+
   @transient
   override lazy val catalog = {
     CarbonProperties.getInstance().addProperty("carbon.storelocation", storePath)
@@ -42,7 +44,9 @@ class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveCon
   }
 
   @transient
-  override protected[sql] lazy val analyzer = new Analyzer(catalog, functionRegistry, conf)
+  override protected[sql] lazy val analyzer = new CarbonAnalyzer(catalog, functionRegistry, conf)
+
+  override def executePlan(plan: LogicalPlan): this.QueryExecution = new this.QueryExecution(plan)
 
   override protected[sql] def dialectClassName = classOf[CarbonSQLDialect].getCanonicalName
 

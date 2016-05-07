@@ -11,13 +11,15 @@ import org.carbondata.hadoop.util.CarbonInputFormatUtil;
 import org.carbondata.query.carbon.executor.QueryExecutorFactory;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
 import org.carbondata.query.carbon.model.QueryModel;
+import org.carbondata.query.carbon.result.BatchRawResult;
+import org.carbondata.query.carbon.result.iterator.ChunkRawRowIterartor;
 
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 /**
- * Created by root1 on 30/4/16.
+ * Reads the data from Carbon store.
  */
 public class CarbonRecordReader<T> extends RecordReader<Void, T> {
 
@@ -44,8 +46,9 @@ public class CarbonRecordReader<T> extends RecordReader<Void, T> {
     readSupport.intialize(CarbonInputFormatUtil.getProjectionColumns(queryModel),
         queryModel.getAbsoluteTableIdentifier());
     try {
-      carbonIterator = (CarbonIterator<Object[]>) QueryExecutorFactory.getQueryExecutor(queryModel)
-          .execute(queryModel);
+      carbonIterator = new ChunkRawRowIterartor(
+          (CarbonIterator<BatchRawResult>) QueryExecutorFactory.getQueryExecutor(queryModel)
+              .execute(queryModel));
     } catch (QueryExecutionException e) {
       throw new IOException(e.getMessage());
     }

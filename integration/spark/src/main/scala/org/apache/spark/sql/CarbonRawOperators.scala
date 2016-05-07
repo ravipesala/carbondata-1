@@ -28,17 +28,19 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.LeafNode
 import org.apache.spark.sql.hive.CarbonMetastoreCatalog
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{ArrayData, DataType, Decimal, MapData}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier}
 import org.carbondata.core.constants.CarbonCommonConstants
 import org.carbondata.core.util.CarbonProperties
 import org.carbondata.integration.spark.{RawKeyVal, RawKeyValImpl}
-import org.carbondata.integration.spark.cache.QueryPredicateTempCache
 import org.carbondata.integration.spark.query.CarbonQueryPlan
 import org.carbondata.integration.spark.rdd.CarbonRawQueryRDD
 import org.carbondata.integration.spark.util.{CarbonQueryUtil, CarbonScalaUtil}
-import org.carbondata.query.carbon.model.{QueryDimension, QueryMeasure}
+import org.carbondata.query.carbon.model.{QueryDimension, QueryMeasure, QuerySchemaInfo}
+import org.carbondata.query.carbon.result.BatchRawResult
+import org.carbondata.query.carbon.wrappers.ByteArrayWrapper
 import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression, Expression => CarbonExpression, LiteralExpression => CarbonLiteralExpression}
 import org.carbondata.query.expression.arithmetic.{AddExpression, DivideExpression, MultiplyExpression, SubstractExpression}
 import org.carbondata.query.expression.conditional._
@@ -48,7 +50,8 @@ import org.carbondata.query.expression.logical.{AndExpression, OrExpression}
 case class CarbonRawCubeScan(
   var attributes: Seq[Attribute],
   relation: CarbonRelation,
-  dimensionPredicates: Seq[Expression])(@transient val oc: SQLContext)
+  dimensionPredicates: Seq[Expression],
+  useBinaryAggregator: Boolean = false)(@transient val oc: SQLContext)
   extends LeafNode {
 
   val cubeName = relation.cubeName
@@ -58,7 +61,6 @@ case class CarbonRawCubeScan(
   var outputColumns = scala.collection.mutable.MutableList[Attribute]()
   var extraPreds: Seq[Expression] = Nil
   val allDims = new scala.collection.mutable.HashSet[String]()
-  // val carbonTable = CarbonMetadata.getInstance().getCarbonTable(cubeName)
   @transient val carbonCatalog = sqlContext.catalog.asInstanceOf[CarbonMetastoreCatalog]
 
 
@@ -143,7 +145,7 @@ case class CarbonRawCubeScan(
     extraPreds = Seq(cond)
   }
 
-  def inputRdd: CarbonRawQueryRDD[Array[Object], Any] = {
+  def inputRdd: CarbonRawQueryRDD[BatchRawResult, Any] = {
     // Update the FilterExpressions with extra conditions added through join pushdown
     if (!extraPreds.isEmpty) {
       val exps = preProcessExpressions(extraPreds.toSeq)
@@ -164,7 +166,7 @@ case class CarbonRawCubeScan(
       absoluteTableIdentifier, buildCarbonPlan, carbonTable)
     model.setForcedDetailRawQuery(true)
     model.setDetailQuery(false)
-    val kv: RawKeyVal[Array[Object], Any] = new RawKeyValImpl()
+    val kv: RawKeyVal[BatchRawResult, Any] = new RawKeyValImpl()
     // setting queryid
     buildCarbonPlan.setQueryId(oc.getConf("queryId", System.nanoTime() + ""))
     // CarbonQueryUtil.updateCarbonExecuterModelWithLoadMetadata(model)
@@ -197,16 +199,25 @@ case class CarbonRawCubeScan(
       }
     }
 
-    inputRdd.map { row =>
-      val dims = row._1.map(toType)
-      new GenericMutableRow(dims)
+    if(useBinaryAggregator) {
+      inputRdd.map { row =>
+        //      val dims = row._1.map(toType)
+        new CarbonRawMutableRow(row._1.getAllRows, row._1.getQuerySchemaInfo)
+      }
+    } else {
+      inputRdd.flatMap { row =>
+        val buffer = new ArrayBuffer[GenericMutableRow]()
+        while(row._1.hasNext) {
+          buffer += new GenericMutableRow(row._1.next().asInstanceOf[Array[Any]])
+        }
+        buffer
+      }
     }
   }
 
   def output: Seq[Attribute] = {
     attributes
   }
-
 }
 
 object CarbonRawCubeScan {
@@ -244,8 +255,9 @@ object CarbonRawCubeScan {
           LessThanEqualToExpression(transformExpression(left), transformExpression(right))
       case AttributeReference(name, dataType, _, _) => new CarbonColumnExpression(name.toString,
         CarbonScalaUtil.convertSparkToCarbonDataType(dataType))
+      case FakeCarbonCast(literal, dataType) => transformExpression(literal)
       case Literal(name, dataType) =>
-        new CarbonLiteralExpression(QueryPredicateTempCache.instance.getPredicate(name.toString),
+        new CarbonLiteralExpression(name,
           CarbonScalaUtil.convertSparkToCarbonDataType(dataType))
       case Cast(left, right) if (!left.isInstanceOf[Literal]) => transformExpression(left)
       case _ =>
@@ -258,3 +270,83 @@ object CarbonRawCubeScan {
   }
 }
 
+class CarbonRawMutableRow(values: Array[Array[Object]],
+  val schema: QuerySchemaInfo) extends GenericMutableRow(values.asInstanceOf[Array[Any]]) {
+
+  val dimsLen = schema.getQueryDimensions.length - 1;
+  val order = schema.getQueryOrder
+  var counter = 0;
+
+  def getKey(): ByteArrayWrapper = values(0)(counter).asInstanceOf[ByteArrayWrapper]
+
+  def parseKey(key: ByteArrayWrapper, aggData: Array[Object]): Array[Object] = {
+    BatchRawResult.parseData(key, aggData, schema);
+  }
+
+  def hasNext(): Boolean = {
+    counter < values(0).length
+  }
+
+  def next(): Unit = {
+    counter += 1
+  }
+
+  override def numFields: Int = dimsLen + schema.getQueryMeasures.length
+
+  override def anyNull: Boolean = true
+
+  override def get(ordinal: Int, dataType: DataType): AnyRef = {
+    values(order(ordinal) - dimsLen)(counter)
+    .asInstanceOf[AnyRef]
+  }
+
+  override def getUTF8String(ordinal: Int): UTF8String = {
+    UTF8String
+    .fromString(values(
+      order(ordinal) - dimsLen)(counter)
+                .asInstanceOf[String])
+  }
+
+  override def getDouble(ordinal: Int): Double = {
+    values(order(ordinal) - dimsLen)(counter)
+    .asInstanceOf[Double]
+  }
+
+  override def getFloat(ordinal: Int): Float = {
+    values(order(ordinal) - dimsLen)(counter)
+    .asInstanceOf[Float]
+  }
+
+  override def getLong(ordinal: Int): Long = {
+    values(order(ordinal) - dimsLen)(counter)
+    .asInstanceOf[Long]
+  }
+
+  override def getByte(ordinal: Int): Byte = {
+    values(order(ordinal) - dimsLen)(counter)
+    .asInstanceOf[Byte]
+  }
+
+  override def getDecimal(ordinal: Int,
+    precision: Int,
+    scale: Int): Decimal = {
+    values(order(ordinal) - dimsLen)(counter).asInstanceOf[Decimal]
+  }
+
+  override def getBoolean(ordinal: Int): Boolean = {
+    values(order(ordinal) - dimsLen)(counter)
+    .asInstanceOf[Boolean]
+  }
+
+  override def getShort(ordinal: Int): Short = {
+    values(order(ordinal) - dimsLen)(counter)
+    .asInstanceOf[Short]
+  }
+
+  override def getInt(ordinal: Int): Int = {
+    values(order(ordinal) - dimsLen)(counter)
+    .asInstanceOf[Int]
+  }
+
+  override def isNullAt(ordinal: Int): Boolean = values(order(ordinal) - dimsLen)(counter) == null
+}

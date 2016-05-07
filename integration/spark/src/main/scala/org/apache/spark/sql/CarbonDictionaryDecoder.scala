@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 import org.apache.spark.sql.hive.CarbonMetastoreCatalog
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 import org.carbondata.core.cache.{Cache, CacheProvider, CacheType}
 import org.carbondata.core.cache.dictionary.{Dictionary, DictionaryColumnUniqueIdentifier}
@@ -89,8 +90,9 @@ case class CarbonDictionaryDecoder(relation: CarbonRelation,
           carbonTable.getDimensionByName(carbonTable.getFactTableName, attr.name);
         if (carbonDimension != null && carbonDimension.hasEncoding(Encoding.DICTIONARY)) {
           (carbonDimension.getColumnId, carbonDimension.getDataType)
+        } else {
+          (null, null)
         }
-        (null, null)
       }).toArray
     dictIds
   }
@@ -116,10 +118,10 @@ case class CarbonDictionaryDecoder(relation: CarbonRelation,
             val data = row.toSeq(dataTypes).toArray
             for (i <- 0 until data.length) {
               if (dicts(i) != null) {
-                data(i) = DataTypeUtil
+                data(i) = toType(DataTypeUtil
                  .getDataBasedOnDataType(dicts(i)
                     .getDictionaryValueForKey(data(i).asInstanceOf[Integer]),
-                            getDictionaryColumnIds(i)._2)
+                            getDictionaryColumnIds(i)._2))
               }
             }
             new GenericMutableRow(data)
@@ -130,6 +132,13 @@ case class CarbonDictionaryDecoder(relation: CarbonRelation,
     }
   }
 
+   private def toType(obj: Any): Any = {
+     obj match {
+       case s: String => UTF8String.fromString(s)
+       case _ => obj
+     }
+   }
+
   private def getDictionary(ati: AbsoluteTableIdentifier,
                     cache: Cache[DictionaryColumnUniqueIdentifier, Dictionary]) = {
     val dicts: Seq[Dictionary] = getDictionaryColumnIds.map { f =>
@@ -137,8 +146,9 @@ case class CarbonDictionaryDecoder(relation: CarbonRelation,
         cache.get(new DictionaryColumnUniqueIdentifier(
           ati.getCarbonTableIdentifier,
           f._1))
+      } else {
+        null
       }
-      null
     }
     dicts
   }
