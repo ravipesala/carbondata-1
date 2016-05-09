@@ -33,7 +33,6 @@ import org.carbondata.query.carbon.executor.impl.QueryExecutorProperties;
 import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
 import org.carbondata.query.carbon.executor.internal.InternalQueryExecutor;
 import org.carbondata.query.carbon.model.QueryModel;
-import org.carbondata.query.util.CarbonEngineLogEvent;
 
 /**
  * In case of detail query we cannot keep all the records in memory so for
@@ -98,8 +97,7 @@ public abstract class AbstractDetailQueryResultIterator<E> implements CarbonIter
       try {
         recordSize = Integer.parseInt(defaultInMemoryRecordsSize);
       } catch (NumberFormatException ne) {
-        LOGGER.error(CarbonEngineLogEvent.UNIBI_CARBONENGINE_MSG,
-            "Invalid inmemory records size. Using default value");
+        LOGGER.error("Invalid inmemory records size. Using default value");
         recordSize = CarbonCommonConstants.INMEMORY_REOCRD_SIZE_DEFAULT;
       }
     }

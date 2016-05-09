@@ -28,7 +28,6 @@ import org.carbondata.common.logging.LogServiceFactory
 import org.carbondata.core.carbon.datastore.block.TableBlockInfo
 import org.carbondata.core.iterator.CarbonIterator
 import org.carbondata.integration.spark.RawKeyVal
-import org.carbondata.integration.spark.util.CarbonSparkInterFaceLogEvent
 import org.carbondata.query.carbon.executor.QueryExecutorFactory
 import org.carbondata.query.carbon.model.QueryModel
 import org.carbondata.query.carbon.result.BatchRawResult
@@ -108,7 +107,7 @@ class CarbonRawQueryRDD[K, V](
         // TODO: CarbonQueryUtil.isQuickFilter quick filter from dictionary needs to support
       } catch {
         case e: Exception =>
-          LOGGER.error(CarbonSparkInterFaceLogEvent.UNIBI_CARBON_SPARK_INTERFACE_MSG, e)
+          LOGGER.error(e)
           // updateCubeAndLevelCacheStatus(levelCacheKeys)
           if (null != e.getMessage) {
             sys.error("Exception occurred in query execution :: " + e.getMessage)

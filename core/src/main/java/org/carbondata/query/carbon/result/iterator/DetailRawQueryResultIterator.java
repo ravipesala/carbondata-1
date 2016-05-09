@@ -32,7 +32,6 @@ import org.carbondata.query.carbon.result.BatchRawResult;
 import org.carbondata.query.carbon.result.Result;
 import org.carbondata.query.carbon.result.preparator.QueryResultPreparator;
 import org.carbondata.query.carbon.result.preparator.impl.RawQueryResultPreparatorImpl;
-import org.carbondata.query.util.CarbonEngineLogEvent;
 
 /**
  * In case of detail query we cannot keep all the records in memory so for
@@ -63,7 +62,7 @@ public class DetailRawQueryResultIterator
     try {
       result = executor.executeQuery(blockExecutionInfos, blockIndexToBeExecuted);
     } catch (QueryExecutionException e) {
-      LOGGER.error(CarbonEngineLogEvent.UNIBI_CARBONENGINE_MSG, e, e.getMessage());
+      LOGGER.error(e, e.getMessage());
     }
     for (int i = 0; i < blockIndexToBeExecuted.length; i++) {
       if (blockIndexToBeExecuted[i] != -1) {
