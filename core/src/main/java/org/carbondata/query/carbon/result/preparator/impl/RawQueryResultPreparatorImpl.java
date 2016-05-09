@@ -15,7 +15,6 @@ import org.carbondata.query.carbon.result.BatchRawResult;
 import org.carbondata.query.carbon.result.Result;
 import org.carbondata.query.carbon.util.DataTypeUtil;
 import org.carbondata.query.carbon.wrappers.ByteArrayWrapper;
-import org.carbondata.query.util.CarbonEngineLogEvent;
 
 /**
  * It does not decode the dictionary.
@@ -125,8 +124,7 @@ public class RawQueryResultPreparatorImpl extends AbstractQueryResultPreparator<
         }
       }
     }
-    LOGGER.info(CarbonEngineLogEvent.UNIBI_CARBONENGINE_MSG,
-        "###########################################------ Total Number of records"
+    LOGGER.info("###########################################------ Total Number of records"
             + resultDataA[0].length);
     return new BatchRawResult(resultDataA);
   }
