@@ -42,8 +42,8 @@ import org.carbondata.query.carbon.util.DataTypeUtil
  * @param sqlContext
  */
 case class CarbonDictionaryDecoder(relations: Map[String, CarbonDatasourceRelation],
-  attributes: Seq[Attribute],
-  include: Boolean,
+  profile: CarbonProfile,
+  aliasMap: Map[String, Attribute],
   child: SparkPlan)
   (@transient sqlContext: SQLContext)
   extends UnaryNode {
@@ -53,7 +53,14 @@ case class CarbonDictionaryDecoder(relations: Map[String, CarbonDatasourceRelati
 
   override def output: Seq[Attribute] = {
     child.output.map { attr =>
-      val attrReference = attr.asInstanceOf[AttributeReference]
+      var attrReference = attr.asInstanceOf[AttributeReference]
+      if (attrReference.qualifiers.size == 0) {
+        attrReference = aliasMap.get(attrReference.name) match {
+          case Some(attr: AttributeReference) => attr
+          case _ => attrReference
+        }
+      }
+
       if (attrReference.qualifiers.size > 0) {
         val carbonTable: CarbonTable = relations.get(attrReference.qualifiers(0)).get.carbonRelation
                                        .metaData.carbonTable
@@ -79,14 +86,13 @@ case class CarbonDictionaryDecoder(relations: Map[String, CarbonDatasourceRelati
   }
 
   def canBeDecoded(attr: Attribute): Boolean = {
-    var decoded = true
-    if (include && attributes.size > 0 && !attributes.contains(attr)) {
-      decoded = false
+    profile match {
+      case ip: IncludeProfile if ip.attributes.size > 0 =>
+        ip.attributes.filter(a => a.name.equals(attr.name)).size>0
+      case ep: ExcludeProfile =>
+        !(ep.attributes.filter(a => a.name.equals(attr.name)).size>0)
+      case _ => true
     }
-    if (!include && attributes.size > 0 && attributes.contains(attr)) {
-      decoded = false
-    }
-    decoded
   }
 
   def convertCarbonToSparkDataType(dataType: DataType): types.DataType = {
@@ -104,7 +110,13 @@ case class CarbonDictionaryDecoder(relations: Map[String, CarbonDatasourceRelati
   val getDictionaryColumnIds = {
     val attributes = child.output
     val dictIds: Array[(String, String, DataType)] = attributes.map(attr => {
-      val attrReference = attr.asInstanceOf[AttributeReference]
+      var attrReference = attr.asInstanceOf[AttributeReference]
+      if (attrReference.qualifiers.size == 0) {
+        attrReference = aliasMap.get(attrReference.name) match {
+          case Some(attr: AttributeReference) => attr
+          case _ => attrReference
+        }
+      }
       if (attrReference.qualifiers.size > 0) {
         val carbonTable = relations.get(attrReference.qualifiers(0))
                           .get.carbonRelation.metaData.carbonTable

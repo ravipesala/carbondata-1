@@ -45,7 +45,7 @@ public class QueryExecutorFactory {
     if (queryModel.isCountStarQuery() && null == queryModel.getFilterExpressionResolverTree()
         && queryModel.getQueryDimension().size() < 1 && queryModel.getQueryMeasures().size() < 2
         && queryModel.getDimAggregationInfo().size() < 1
-        && queryModel.getExpressions().size() == 0) {
+        && queryModel.getExpressions().size() == 0 && !queryModel.isForcedDetailRawQuery()) {
       LOGGER.info("Count(*) query: ");
       return new CountStarQueryExecutor();
     }

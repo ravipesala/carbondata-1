@@ -18,19 +18,16 @@
 
 package org.apache.spark.sql.hive
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, QueryPlanner}
-import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
-import org.apache.spark.sql.cubemodel._
-import org.apache.spark.sql.execution.{Aggregate, DescribeCommand => RunnableDescribeCommand, ExecutedCommand, Project, SparkPlan}
-import org.apache.spark.sql.execution.datasources.{DescribeCommand => LogicalDescribeCommand}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.{Filter, Project, SparkPlan}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
 
 import org.carbondata.common.logging.LogServiceFactory
-import org.carbondata.integration.spark.util.CarbonSparkInterFaceLogEvent
 
 class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
 
@@ -43,16 +40,24 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
     total
   }
 
-   /**
-    * Carbon strategies for Carbon cube scanning
-    */
+  /**
+   * Carbon strategies for Carbon cube scanning
+   */
   private[sql] object CarbonRawCubeScans extends Strategy {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = {
       plan match {
         case PhysicalOperation(projectList, predicates,
         l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)) =>
-          carbonScan(projectList, predicates, carbonRelation.carbonRelation) :: Nil
+          carbonRawScan(projectList,
+            predicates,
+            carbonRelation,
+            None,
+            None,
+            None,
+            false,
+            true,
+            false)(sqlContext)._1 :: Nil
 
         case catalyst.planning.PartialAggregation(
         namedGroupingAttributes,
@@ -61,82 +66,133 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         partialComputation,
         PhysicalOperation(projectList, predicates,
         l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _))) =>
-          val s = carbonScan(projectList, predicates, carbonRelation.carbonRelation, false, true)
-          Aggregate(
-              partial = false,
-              namedGroupingAttributes,
-              rewrittenAggregateExpressions,
-            CarbonRawAggregate(
-                partial = true,
-                groupingExpressions,
-                partialComputation,
-                s)) :: Nil
-        case CarbonDictionaryCatalystDecoder(relations, attributes, include, child) =>
-          CarbonDictionaryDecoder(relations, attributes, include,
-            planLater(child))(sqlContext) :: Nil
+          handleRawAggregation(plan, plan, projectList, predicates, carbonRelation,
+            partialComputation, groupingExpressions, namedGroupingAttributes,
+            rewrittenAggregateExpressions)
+        case CarbonDictionaryCatalystDecoder(relations, profile, aliasMap, child) =>
+          CarbonDictionaryDecoder(relations, profile, aliasMap, planLater(child))(sqlContext) :: Nil
         case _ =>
           Nil
       }
     }
 
-    private def allAggregates(exprs: Seq[Expression]) = {
-      exprs.flatMap(_.collect { case a: AggregateExpression => a })
-    }
 
-    private def canPushDownJoin(otherRDDPlan: LogicalPlan,
-                                joinCondition: Option[Expression]): Boolean = {
-      val pushdowmJoinEnabled = sqlContext.sparkContext.conf
-                                .getBoolean("spark.carbon.pushdown.join.as.filter", true)
+    def handleRawAggregation(plan: LogicalPlan,
+      aggPlan: LogicalPlan,
+      projectList: Seq[NamedExpression],
+      predicates: Seq[Expression],
+      carbonRelation: CarbonDatasourceRelation,
+      partialComputation: Seq[NamedExpression],
+      groupingExpressions: Seq[Expression],
+      namedGroupingAttributes: Seq[Attribute],
+      rewrittenAggregateExpressions: Seq[NamedExpression]):
+    Seq[SparkPlan] = {
+      val (_, _, _, aliases, groupExprs, substitutesortExprs, limitExpr) = extractPlan(plan)
 
-      if (!pushdowmJoinEnabled) {
-        return false
-      }
-
-      val isJoinOnCarbonCube = otherRDDPlan match {
-        case other@PhysicalOperation(projectList, predicates,
-        l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)) => true
-        case _ => false
-      }
-
-      // TODO remove the isJoinOnCarbonCube check
-      if (isJoinOnCarbonCube) {
-        return false // For now If both left & right are carbon cubes, let's not join
-      }
-
-      otherRDDPlan match {
-        case BroadcastHint(p) => true
-        case p if sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
-                  p.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold => {
-          LOGGER.info(CarbonSparkInterFaceLogEvent.UNIBI_CARBON_SPARK_INTERFACE_MSG,
-            "canPushDownJoin statistics:" + p.statistics.sizeInBytes)
-          true
+      val s =
+        try { {
+          carbonRawScan(projectList,
+            predicates,
+            carbonRelation,
+            Some(partialComputation),
+            substitutesortExprs,
+            limitExpr,
+            !groupingExpressions.isEmpty,
+            false,
+            true)(sqlContext)
         }
-        case _ => false
+        } catch {
+          case _ => null
+        }
+
+      if (s != null) {
+        if (!s._2) {
+          CarbonAggregate(
+            partial = false,
+            namedGroupingAttributes,
+            rewrittenAggregateExpressions,
+            CarbonRawAggregate(
+              partial = true,
+              groupingExpressions,
+              partialComputation,
+              s._1))(sqlContext) :: Nil
+        } else {
+          Nil
+        }
+      } else {
+        Nil
       }
     }
 
-    private def carbonScan(projectList: Seq[NamedExpression],
-                           predicates: Seq[Expression],
-                           relation: CarbonRelation,
-                           detailQuery: Boolean = true,
-                           useBinaryAggregator: Boolean = false) = {
+    /**
+     * Create carbon scan
+     */
+    private def carbonRawScan(projectList: Seq[NamedExpression],
+      predicates: Seq[Expression],
+      relation: CarbonDatasourceRelation,
+      groupExprs: Option[Seq[Expression]],
+      substitutesortExprs: Option[Seq[SortOrder]],
+      limitExpr: Option[Expression],
+      isGroupByPresent: Boolean,
+      detailQuery: Boolean,
+      useBinaryAggregation: Boolean)(sc: SQLContext): (SparkPlan, Boolean) = {
 
+      val tableName: String =
+        relation.carbonRelation.metaData.carbonTable.getFactTableName.toLowerCase
       if (detailQuery == false) {
         val projectSet = AttributeSet(projectList.flatMap(_.references))
-        CarbonRawCubeScan(
+        val s = CarbonRawCubeScan(
           projectSet.toSeq,
-          relation,
+          relation.carbonRelation,
           predicates,
-          useBinaryAggregator)(sqlContext)
+          groupExprs,
+          substitutesortExprs,
+          limitExpr,
+          isGroupByPresent,
+          detailQuery,
+          useBinaryAggregation)(sqlContext)
+        if (s.attributesNeedToDecode.size() > 0) {
+          val relations = Seq((tableName, relation)).toMap
+          val attrs = s.attributesNeedToDecode.asScala.toSeq.map { attr =>
+            AttributeReference(attr.name,
+              attr.dataType,
+              attr.nullable,
+              attr.metadata)(attr.exprId, Seq(tableName))
+          }
+          val predExpr = predicates.reduceLeft(And)
+          (Project(projectList, Filter(predicates.reduceLeft(And),
+            CarbonDictionaryDecoder(relations, IncludeProfile(attrs), Map(), s)(sc))),
+            true)
+        } else {
+          (s, s.buildCarbonPlan.getDimAggregatorInfos.size() > 0)
+        }
+
       }
       else {
         val projectSet = AttributeSet(projectList.flatMap(_.references))
-        Project(projectList,
-          CarbonRawCubeScan(projectSet.toSeq,
-            relation,
-            predicates,
-            useBinaryAggregator)(sqlContext))
-
+        val s = CarbonRawCubeScan(projectSet.toSeq,
+          relation.carbonRelation,
+          predicates,
+          groupExprs,
+          substitutesortExprs,
+          limitExpr,
+          isGroupByPresent,
+          detailQuery,
+          useBinaryAggregation)(sqlContext)
+        if (s.attributesNeedToDecode.size() > 0) {
+          val relations = Seq((tableName, relation)).toMap
+          val attrs = s.attributesNeedToDecode.asScala.toSeq.map { attr =>
+            AttributeReference(attr.name,
+              attr.dataType,
+              attr.nullable,
+              attr.metadata)(attr.exprId, Seq(tableName))
+          }
+          (Project(projectList, Filter(predicates.reduceLeft(And),
+            CarbonDictionaryDecoder(relations, IncludeProfile(attrs), Map(), s)(sc))),
+            true)
+        } else {
+          (Project(projectList, s), s.buildCarbonPlan.getDimAggregatorInfos.size() > 0)
+        }
       }
     }
 

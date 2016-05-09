@@ -92,26 +92,6 @@ case class CarbonRawAggregate(
     }
   }.toArray
 
-  def bindReference[A <: Expression](
-    expression: A,
-    input: Seq[Attribute],
-    allowFailures: Boolean = false): A = {
-    expression.transform { case a: AttributeReference =>
-      attachTree(a, "Binding attribute") {
-        val ordinal = input.indexWhere(_.exprId == a.exprId)
-        if (ordinal == -1) {
-          if (allowFailures) {
-            a
-          } else {
-            sys.error(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
-          }
-        } else {
-          BoundReference(ordinal, a.dataType, a.nullable)
-        }
-      }
-    }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
-  }
-
   /** The schema of the result of all aggregate evaluations */
   private[this] val computedSchema = computedAggregates.map(_.resultAttribute)
 
@@ -156,14 +136,17 @@ case class CarbonRawAggregate(
       if (groupingExpressions.isEmpty) {
         child.execute().mapPartitions { iter =>
           val buffer = newAggregateBuffer()
-          var currentRow: InternalRow = null
+          var currentRow: CarbonRawMutableRow = null
           while (iter.hasNext) {
-            currentRow = iter.next()
-            numInputRows += 1
-            var i = 0
-            while (i < buffer.length) {
-              buffer(i).update(currentRow)
-              i += 1
+            currentRow = iter.next().asInstanceOf[CarbonRawMutableRow]
+            while (currentRow.hasNext()) {
+              numInputRows += 1
+              var i = 0
+              while (i < buffer.length) {
+                buffer(i).update(currentRow)
+                i += 1
+              }
+              currentRow.next()
             }
           }
           val resultProjection = new InterpretedProjection(resultExpressions, computedSchema)
