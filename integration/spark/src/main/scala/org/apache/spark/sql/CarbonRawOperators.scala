@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.util.ArrayList
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
@@ -26,14 +24,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.LeafNode
-import org.apache.spark.sql.hive.CarbonMetastoreCatalog
-import org.apache.spark.sql.types.{ArrayData, DataType, Decimal, MapData}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.sql.types.{DataType, Decimal}
+import org.apache.spark.unsafe.types.UTF8String
 
 import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier}
 import org.carbondata.core.constants.CarbonCommonConstants
-import org.carbondata.core.util.CarbonProperties
 import org.carbondata.integration.spark.{RawKeyVal, RawKeyValImpl}
 import org.carbondata.integration.spark.query.CarbonQueryPlan
 import org.carbondata.integration.spark.rdd.CarbonRawQueryRDD
@@ -42,125 +37,279 @@ import org.carbondata.query.carbon.model.{QueryDimension, QueryMeasure, QuerySch
 import org.carbondata.query.carbon.result.BatchRawResult
 import org.carbondata.query.carbon.wrappers.ByteArrayWrapper
 import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression, Expression => CarbonExpression, LiteralExpression => CarbonLiteralExpression}
-import org.carbondata.query.expression.arithmetic.{AddExpression, DivideExpression, MultiplyExpression, SubstractExpression}
 import org.carbondata.query.expression.conditional._
 import org.carbondata.query.expression.logical.{AndExpression, OrExpression}
 
 
-case class CarbonRawCubeScan(
-  var attributes: Seq[Attribute],
-  relation: CarbonRelation,
-  dimensionPredicates: Seq[Expression],
-  useBinaryAggregator: Boolean = false)(@transient val oc: SQLContext)
-  extends LeafNode {
+case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
+  relationRaw: CarbonRelation,
+  dimensionPredicatesRaw: Seq[Expression],
+  aggExprsRaw: Option[Seq[Expression]],
+  sortExprsRaw: Option[Seq[SortOrder]],
+  limitExprRaw: Option[Expression],
+  isGroupByPresentRaw: Boolean,
+  detailQueryRaw: Boolean = false,
+  useBinaryAggregator: Boolean)(@transient val ocRaw: SQLContext)
+  extends AbstractCubeScan(attributesRaw,
+    relationRaw,
+    dimensionPredicatesRaw,
+    aggExprsRaw,
+    sortExprsRaw,
+    limitExprRaw,
+    isGroupByPresentRaw,
+    detailQueryRaw)(ocRaw) {
 
-  val cubeName = relation.cubeName
-  val carbonTable = relation.metaData.carbonTable
-  val selectedDims = scala.collection.mutable.MutableList[QueryDimension]()
-  val selectedMsrs = scala.collection.mutable.MutableList[QueryMeasure]()
-  var outputColumns = scala.collection.mutable.MutableList[Attribute]()
-  var extraPreds: Seq[Expression] = Nil
-  val allDims = new scala.collection.mutable.HashSet[String]()
-  @transient val carbonCatalog = sqlContext.catalog.asInstanceOf[CarbonMetastoreCatalog]
+  override def processAggregateExpr(plan: CarbonQueryPlan, currentAggregate: AggregateExpression1,
+    queryOrder: Int): Int = {
 
-
-  val buildCarbonPlan: CarbonQueryPlan = {
-    val plan: CarbonQueryPlan = new CarbonQueryPlan(relation.schemaName, relation.cubeName)
-
-
-    var queryOrder: Integer = 0
-    attributes.map(
-      attr => {
-        val carbonDimension = carbonTable.getDimensionByName(carbonTable.getFactTableName
-          , attr.name)
-        if (carbonDimension != null) {
-          // TODO if we can add ordina in carbonDimension, it will be good
-          allDims += attr.name
-          val dim = new QueryDimension(attr.name)
-          dim.setQueryOrder(queryOrder);
-          queryOrder = queryOrder + 1
-          selectedDims += dim
+    currentAggregate match {
+      case Sum(attr: AttributeReference) =>
+        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+        if (msrs.length > 0) {
+          val m1 = new QueryMeasure(attr.name)
+          m1.setAggregateFunction(CarbonCommonConstants.SUM)
+          m1.setQueryOrder(queryOrder)
+          plan.addMeasure(m1)
         } else {
-          val carbonMeasure = carbonTable.getMeasureByName(carbonTable.getFactTableName()
-            , attr.name)
-          if (carbonMeasure != null) {
-            val m1 = new QueryMeasure(attr.name)
-            m1.setQueryOrder(queryOrder);
-            queryOrder = queryOrder + 1
-            selectedMsrs += m1
+          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+          if (dims.length > 0) {
+            val d1 = new QueryDimension(attr.name)
+            d1.setQueryOrder(queryOrder)
+            plan.addAggDimAggInfo(d1.getColumnName, "sum", d1.getQueryOrder)
           }
         }
-      })
-    queryOrder = 0
+        queryOrder + 1
 
-    selectedDims.foreach(plan.addDimension(_))
-    selectedMsrs.foreach(plan.addMeasure(_))
+      case Count(attr: AttributeReference) =>
+        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+        if (msrs.length > 0) {
+          val m1 = new QueryMeasure(attr.name)
+          m1.setAggregateFunction(CarbonCommonConstants.COUNT)
+          m1.setQueryOrder(queryOrder)
+          plan.addMeasure(m1)
+        } else {
+          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+          if (dims.length > 0) {
+            val d1 = new QueryDimension(attr.name)
+            d1.setQueryOrder(queryOrder)
+            plan.addAggDimAggInfo(d1.getColumnName, "count", d1.getQueryOrder)
+          }
+        }
+        queryOrder + 1
+      case Count(Literal(star, _)) =>
+        val m1 = new QueryMeasure("count(*)")
+        m1.setAggregateFunction(CarbonCommonConstants.COUNT)
+        m1.setQueryOrder(queryOrder)
+        plan.addMeasure(m1)
+        plan.setCountStartQuery(true)
+        queryOrder + 1
+      case CountDistinct(attr: AttributeReference) =>
+        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+        if (msrs.length > 0) {
+          val m1 = new QueryMeasure(attr.name)
+          m1.setAggregateFunction(CarbonCommonConstants.DISTINCT_COUNT)
+          m1.setQueryOrder(queryOrder)
+          plan.addMeasure(m1)
+        } else {
+          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+          if (dims.length > 0) {
+            val d1 = new QueryDimension(attr.name)
+            d1.setQueryOrder(queryOrder)
+            plan.addAggDimAggInfo(d1.getColumnName, "distinct-count", d1.getQueryOrder)
+          }
+        }
+        queryOrder + 1
 
-    val orderList = new ArrayList[QueryDimension]()
+      case Average(attr: AttributeReference) =>
+        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+        if (msrs.length > 0) {
+          val m1 = new QueryMeasure(attr.name)
+          m1.setAggregateFunction(CarbonCommonConstants.AVERAGE)
+          m1.setQueryOrder(queryOrder)
+          plan.addMeasure(m1)
+        } else {
+          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+          if (dims.length > 0) {
+            val d1 = new QueryDimension(attr.name)
+            d1.setQueryOrder(queryOrder)
+            plan.addAggDimAggInfo(d1.getColumnName, "avg", d1.getQueryOrder)
+          }
+        }
+        queryOrder + 1
 
-    plan.setSortedDimemsions(orderList)
-    plan.setDetailQuery(true)
-    plan.setRawDetailQuery(true)
-    plan.setOutLocationPath(
-      CarbonProperties.getInstance().getProperty(CarbonCommonConstants.STORE_LOCATION_HDFS));
-    plan.setQueryId(System.nanoTime() + "");
-    if (!dimensionPredicates.isEmpty) {
-      val exps = preProcessExpressions(dimensionPredicates)
-      val expressionVal = CarbonRawCubeScan.transformExpression(exps.head)
-      // adding dimension used in expression in querystats
-      expressionVal.getChildren.asScala.filter { x => x.isInstanceOf[CarbonColumnExpression] }
-      .map { y => allDims += y.asInstanceOf[CarbonColumnExpression].getColumnName }
-      plan.setFilterExpression(expressionVal)
+      case Min(attr: AttributeReference) =>
+        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+        if (msrs.length > 0) {
+          val m1 = new QueryMeasure(attr.name)
+          m1.setAggregateFunction(CarbonCommonConstants.MIN)
+          m1.setQueryOrder(queryOrder)
+          plan.addMeasure(m1)
+        } else {
+          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+          if (dims != null) {
+            val d1 = new QueryDimension(attr.name)
+            d1.setQueryOrder(queryOrder)
+            plan.addAggDimAggInfo(d1.getColumnName, "min", d1.getQueryOrder)
+          }
+        }
+        queryOrder + 1
+
+      case Max(attr: AttributeReference) =>
+        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+        if (msrs.length > 0) {
+          val m1 = new QueryMeasure(attr.name)
+          m1.setAggregateFunction(CarbonCommonConstants.MAX)
+          m1.setQueryOrder(queryOrder)
+          plan.addMeasure(m1)
+        } else {
+          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+          if (dims.length > 0) {
+            val d1 = new QueryDimension(attr.name)
+            d1.setQueryOrder(queryOrder)
+            plan.addAggDimAggInfo(d1.getColumnName, "max", d1.getQueryOrder)
+          }
+        }
+        queryOrder + 1
+
+      case SumDistinct(attr: AttributeReference) =>
+        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+        if (msrs.length > 0) {
+          val m1 = new QueryMeasure(attr.name)
+          m1.setAggregateFunction(CarbonCommonConstants.SUM_DISTINCT)
+          m1.setQueryOrder(queryOrder)
+          plan.addMeasure(m1)
+        } else {
+          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+          if (dims != null) {
+            //            plan.removeDimensionFromDimList(dims(0));
+            val d1 = new QueryDimension(attr.name)
+            d1.setQueryOrder(queryOrder)
+            plan.addAggDimAggInfo(d1.getColumnName, "sum-distinct", queryOrder)
+          }
+        }
+        queryOrder + 1
+      case _ => throw new
+          Exception("Some Aggregate functions cannot be pushed, force to detailequery")
     }
-    plan
   }
 
-  def preProcessExpressions(expressions: Seq[Expression]): Seq[Expression] = {
-    expressions match {
-      case left :: right :: rest => preProcessExpressions(List(And(left, right)) ::: rest)
-      case List(left, right) => List(And(left, right))
+  override def processFilterExpressions(plan: CarbonQueryPlan) {
+    if (!dimensionPredicatesRaw.isEmpty) {
+      val expressionVal = processExpression(dimensionPredicatesRaw)
+      expressionVal match {
+        case Some(ce) =>
+          // adding dimension used in expression in querystats
+          ce.getChildren.asScala.filter { x => x.isInstanceOf[CarbonColumnExpression] }
+          .map { y => allDims += y.asInstanceOf[CarbonColumnExpression].getColumnName }
+          plan.setFilterExpression(ce)
+        case _ =>
+      }
+    }
+    processExtraAttributes(plan)
+  }
 
-      case _ => expressions
+  private def processExtraAttributes(plan: CarbonQueryPlan) {
+    if (attributesNeedToDecode.size() > 0) {
+      val attributeOut = new ArrayBuffer[Attribute]() ++ attributesRaw
+
+      attributesNeedToDecode.asScala.map { attr =>
+        val dims = plan.getDimensions.asScala.filter(f => f.getColumnName.equals(attr.name))
+        val msrs = plan.getMeasures.asScala.filter(f => f.getColumnName.equals(attr.name))
+        var order = plan.getDimensions.size() + plan.getMeasures.size()
+        if (dims.size == 0 && msrs.size == 0) {
+          val dimension = carbonTable.getDimensionByName(carbonTable.getFactTableName, attr.name)
+          if (dimension != null) {
+            val qDim = new QueryDimension(dimension.getColName)
+            qDim.setQueryOrder(order)
+            plan.addDimension(qDim)
+            attributeOut += attr
+            order += 1
+          } else {
+            val measure = carbonTable.getMeasureByName(carbonTable.getFactTableName, attr.name)
+            if (measure != null) {
+              val qMsr = new QueryMeasure(measure.getColName)
+              qMsr.setQueryOrder(order)
+              order += 1
+              attributeOut += attr
+            }
+          }
+        }
+      }
+      attributesRaw = attributeOut
     }
   }
 
-  def addPushdownFilters(keys: Seq[Expression], filters: Array[Array[Expression]],
-    conditions: Option[Expression]) {
+  def processExpression(exprs: Seq[Expression]): Option[CarbonExpression] = {
+    def transformExpression(expr: Expression): Option[CarbonExpression] = {
+      expr match {
+        case Or(left, right) =>
+          for {
+            leftFilter <- transformExpression(left)
+            rightFilter <- transformExpression(right)
+          } yield {
+            new OrExpression(leftFilter, rightFilter)
+          }
 
-    // TODO Values in the IN filter is duplicate. replace the list with set
-    val buffer = new ArrayBuffer[Expression]
-    keys.zipWithIndex.foreach { a =>
-      buffer += In(a._1, filters(a._2)).asInstanceOf[Expression]
+        case And(left, right) =>
+          (transformExpression(left) ++ transformExpression(right)).reduceOption(new
+              AndExpression(_, _))
+
+        case EqualTo(a: Attribute, FakeCarbonCast(l@Literal(v, t), b)) => new
+            Some(new EqualToExpression(transformExpression(a).get, transformExpression(l).get))
+        case EqualTo(FakeCarbonCast(l@Literal(v, t), b), a: Attribute) => new
+            Some(new EqualToExpression(transformExpression(a).get, transformExpression(l).get))
+        case EqualTo(Cast(a: Attribute, _), FakeCarbonCast(l@Literal(v, t), b)) => new
+            Some(new EqualToExpression(transformExpression(a).get, transformExpression(l).get))
+        case EqualTo(FakeCarbonCast(l@Literal(v, t), b), Cast(a: Attribute, _)) => new
+            Some(new EqualToExpression(transformExpression(a).get, transformExpression(l).get))
+
+        case Not(EqualTo(a: Attribute, FakeCarbonCast(l@Literal(v, t), b))) => new
+            Some(new NotEqualsExpression(transformExpression(a).get, transformExpression(l).get))
+        case Not(EqualTo(FakeCarbonCast(l@Literal(v, t), b), a: Attribute)) => new
+            Some(new NotEqualsExpression(transformExpression(a).get, transformExpression(l).get))
+        case Not(EqualTo(Cast(a: Attribute, _), FakeCarbonCast(l@Literal(v, t), b))) => new
+            Some(new NotEqualsExpression(transformExpression(a).get, transformExpression(l).get))
+        case Not(EqualTo(FakeCarbonCast(l@Literal(v, t), b), Cast(a: Attribute, _))) => new
+            Some(new NotEqualsExpression(transformExpression(a).get, transformExpression(l).get))
+
+        case Not(In(a: Attribute, list)) if !list.exists(!_.isInstanceOf[FakeCarbonCast]) =>
+          Some(new NotInExpression(transformExpression(a).get,
+            new ListExpression(list.map(transformExpression(_).get).asJava)))
+        case In(a: Attribute, list) if !list.exists(!_.isInstanceOf[FakeCarbonCast]) =>
+          Some(new InExpression(transformExpression(a).get,
+            new ListExpression(list.map(transformExpression(_).get).asJava)))
+        case Not(In(Cast(a: Attribute, _), list))
+          if !list.exists(!_.isInstanceOf[FakeCarbonCast]) =>
+          Some(new NotInExpression(transformExpression(a).get,
+            new ListExpression(list.map(transformExpression(_).get).asJava)))
+        case In(Cast(a: Attribute, _), list) if !list.exists(!_.isInstanceOf[FakeCarbonCast]) =>
+          Some(new InExpression(transformExpression(a).get,
+            new ListExpression(list.map(transformExpression(_).get).asJava)))
+
+        case AttributeReference(name, dataType, _, _) =>
+          Some(new CarbonColumnExpression(name.toString,
+            CarbonScalaUtil.convertSparkToCarbonDataType(dataType)))
+        case FakeCarbonCast(literal, dataType) => transformExpression(literal)
+        case Literal(name, dataType) => Some(new
+            CarbonLiteralExpression(name, CarbonScalaUtil.convertSparkToCarbonDataType(dataType)))
+        case Cast(left, right) if (!left.isInstanceOf[Literal]) => transformExpression(left)
+        case others =>
+          others.collect {
+            case attr: AttributeReference => attributesNeedToDecode.add(attr)
+          }
+          None
+      }
     }
-
-    // Let's not pushdown condition. Only filter push down is sufficient.
-    // Conditions can be applied on hash join result.
-    val cond = if (buffer.size > 1) {
-      val e = buffer.remove(0)
-      buffer.fold(e)(And(_, _))
-    } else {
-      buffer.asJava.get(0)
-    }
-
-    extraPreds = Seq(cond)
+    exprs.flatMap(transformExpression).reduceOption(new AndExpression(_, _))
   }
 
   def inputRdd: CarbonRawQueryRDD[BatchRawResult, Any] = {
-    // Update the FilterExpressions with extra conditions added through join pushdown
-    if (!extraPreds.isEmpty) {
-      val exps = preProcessExpressions(extraPreds.toSeq)
-      val expressionVal = CarbonRawCubeScan.transformExpression(exps.head)
-      val oldExpressionVal = buildCarbonPlan.getFilterExpression()
-      if (null == oldExpressionVal) {
-        buildCarbonPlan.setFilterExpression(expressionVal);
-      } else {
-        buildCarbonPlan.setFilterExpression(new AndExpression(oldExpressionVal, expressionVal));
-      }
-    }
 
     val conf = new Configuration();
-    val absoluteTableIdentifier = new AbsoluteTableIdentifier(carbonCatalog.storePath,
-      new CarbonTableIdentifier(carbonTable.getDatabaseName, carbonTable.getFactTableName))
+    val absoluteTableIdentifier =
+      new AbsoluteTableIdentifier(carbonCatalog.storePath,
+        new CarbonTableIdentifier(carbonTable.getDatabaseName,
+          carbonTable.getFactTableName))
 
     val model = CarbonQueryUtil.createQueryModel(
       absoluteTableIdentifier, buildCarbonPlan, carbonTable)
@@ -169,16 +318,15 @@ case class CarbonRawCubeScan(
     val kv: RawKeyVal[BatchRawResult, Any] = new RawKeyValImpl()
     // setting queryid
     buildCarbonPlan.setQueryId(oc.getConf("queryId", System.nanoTime() + ""))
-    // CarbonQueryUtil.updateCarbonExecuterModelWithLoadMetadata(model)
-    // CarbonQueryUtil.setPartitionColumn(model, relation.cubeMeta.partitioner.partitionColumn)
     // scalastyle:off println
     println("Selected Table to Query ****** "
-            + model.getAbsoluteTableIdentifier.getCarbonTableIdentifier.getTableName())
+      + model.getAbsoluteTableIdentifier.getCarbonTableIdentifier.getTableName())
     // scalastyle:on println
 
-    val cubeCreationTime = carbonCatalog.getCubeCreationTime(relation.schemaName, cubeName)
-    val schemaLastUpdatedTime =
-      carbonCatalog.getSchemaLastUpdatedTime(relation.schemaName, cubeName)
+    val cubeCreationTime = carbonCatalog
+                           .getCubeCreationTime(relationRaw.schemaName, cubeName)
+    val schemaLastUpdatedTime = carbonCatalog
+                                .getSchemaLastUpdatedTime(relationRaw.schemaName, cubeName)
     val big = new CarbonRawQueryRDD(
       oc.sparkContext,
       model,
@@ -191,7 +339,7 @@ case class CarbonRawCubeScan(
     big
   }
 
-  def doExecute(): RDD[InternalRow] = {
+  override def doExecute(): RDD[InternalRow] = {
     def toType(obj: Any): Any = {
       obj match {
         case s: String => UTF8String.fromString(s)
@@ -199,7 +347,7 @@ case class CarbonRawCubeScan(
       }
     }
 
-    if(useBinaryAggregator) {
+    if (useBinaryAggregator) {
       inputRdd.map { row =>
         //      val dims = row._1.map(toType)
         new CarbonRawMutableRow(row._1.getAllRows, row._1.getQuerySchemaInfo)
@@ -207,7 +355,7 @@ case class CarbonRawCubeScan(
     } else {
       inputRdd.flatMap { row =>
         val buffer = new ArrayBuffer[GenericMutableRow]()
-        while(row._1.hasNext) {
+        while (row._1.hasNext) {
           buffer += new GenericMutableRow(row._1.next().asInstanceOf[Array[Any]])
         }
         buffer
@@ -215,58 +363,8 @@ case class CarbonRawCubeScan(
     }
   }
 
-  def output: Seq[Attribute] = {
-    attributes
-  }
-}
-
-object CarbonRawCubeScan {
-  def transformExpression(expr: Expression): CarbonExpression = {
-    expr match {
-      case Or(left, right) => new
-          OrExpression(transformExpression(left), transformExpression(right))
-      case And(left, right) => new
-          AndExpression(transformExpression(left), transformExpression(right))
-      case EqualTo(left, right) => new
-          EqualToExpression(transformExpression(left), transformExpression(right))
-      case Not(EqualTo(left, right)) => new
-          NotEqualsExpression(transformExpression(left), transformExpression(right))
-      case IsNotNull(child) => new
-          NotEqualsExpression(transformExpression(child), transformExpression(Literal(null)))
-      case Not(In(left, right)) => new NotInExpression(transformExpression(left),
-        new ListExpression(right.map(transformExpression).asJava))
-      case In(left, right) => new InExpression(transformExpression(left),
-        new ListExpression(right.map(transformExpression).asJava))
-      case Add(left, right) => new
-          AddExpression(transformExpression(left), transformExpression(right))
-      case Subtract(left, right) => new
-          SubstractExpression(transformExpression(left), transformExpression(right))
-      case Multiply(left, right) => new
-          MultiplyExpression(transformExpression(left), transformExpression(right))
-      case Divide(left, right) => new
-          DivideExpression(transformExpression(left), transformExpression(right))
-      case GreaterThan(left, right) => new
-          GreaterThanExpression(transformExpression(left), transformExpression(right))
-      case LessThan(left, right) => new
-          LessThanExpression(transformExpression(left), transformExpression(right))
-      case GreaterThanOrEqual(left, right) => new
-          GreaterThanEqualToExpression(transformExpression(left), transformExpression(right))
-      case LessThanOrEqual(left, right) => new
-          LessThanEqualToExpression(transformExpression(left), transformExpression(right))
-      case AttributeReference(name, dataType, _, _) => new CarbonColumnExpression(name.toString,
-        CarbonScalaUtil.convertSparkToCarbonDataType(dataType))
-      case FakeCarbonCast(literal, dataType) => transformExpression(literal)
-      case Literal(name, dataType) =>
-        new CarbonLiteralExpression(name,
-          CarbonScalaUtil.convertSparkToCarbonDataType(dataType))
-      case Cast(left, right) if (!left.isInstanceOf[Literal]) => transformExpression(left)
-      case _ =>
-        new SparkUnknownExpression(expr.transform {
-          case AttributeReference(name, dataType, _, _) =>
-            CarbonBoundReference(new CarbonColumnExpression(name.toString,
-              CarbonScalaUtil.convertSparkToCarbonDataType(dataType)), dataType, expr.nullable)
-        })
-    }
+  override def output: Seq[Attribute] = {
+    attributesRaw
   }
 }
 

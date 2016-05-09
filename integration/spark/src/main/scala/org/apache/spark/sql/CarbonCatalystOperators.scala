@@ -164,11 +164,15 @@ case class DescribeFormattedCommand(sql: String, tblIdentifier: Seq[String])
 
 case class CarbonDictionaryCatalystDecoder(
   relations: Map[String, CarbonDatasourceRelation],
-  attributes: Seq[Attribute],
-  include: Boolean,
+  profile: CarbonProfile,
+  aliasMap: Map[String, Attribute],
   child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
+
+abstract class CarbonProfile(attributes: Seq[Attribute]) extends Serializable
+case class IncludeProfile(attributes: Seq[Attribute]) extends CarbonProfile(attributes)
+case class ExcludeProfile(attributes: Seq[Attribute]) extends CarbonProfile(attributes)
 
 case class FakeCarbonCast(child: Literal, dataType: DataType)
   extends LeafExpression with CodegenFallback {

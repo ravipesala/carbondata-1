@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.util
 import java.util.ArrayList
 
 import scala.collection.JavaConverters._
@@ -53,16 +54,14 @@ import org.carbondata.query.expression.conditional._
 import org.carbondata.query.expression.logical.{AndExpression, OrExpression}
 import org.carbondata.query.scanner.impl.{CarbonKey, CarbonValue}
 
-case class CarbonCubeScan(
-                           var attributes: Seq[Attribute],
-                           relation: CarbonRelation,
-                           dimensionPredicates: Seq[Expression],
-                           aggExprs: Option[Seq[Expression]],
-                           sortExprs: Option[Seq[SortOrder]],
-                           limitExpr: Option[Expression],
-                           isGroupByPresent: Boolean,
-                           detailQuery: Boolean = false)(@transient val oc: SQLContext)
-  extends LeafNode {
+abstract class AbstractCubeScan(var attributes: Seq[Attribute],
+  relation: CarbonRelation,
+  dimensionPredicates: Seq[Expression],
+  aggExprs: Option[Seq[Expression]],
+  sortExprs: Option[Seq[SortOrder]],
+  limitExpr: Option[Expression],
+  isGroupByPresent: Boolean,
+  detailQuery: Boolean = false)(@transient val oc: SQLContext) extends LeafNode {
 
   val cubeName = relation.cubeName
   val carbonTable = relation.metaData.carbonTable
@@ -74,8 +73,163 @@ case class CarbonCubeScan(
   // val carbonTable = CarbonMetadata.getInstance().getCarbonTable(cubeName)
   @transient val carbonCatalog = sqlContext.catalog.asInstanceOf[CarbonMetastoreCatalog]
 
+  val attributesNeedToDecode = new util.HashSet[AttributeReference]()
+  val buildCarbonPlan: CarbonQueryPlan = {
+    val plan: CarbonQueryPlan = new CarbonQueryPlan(relation.schemaName, relation.cubeName)
+
+
+    var forceDetailedQuery = detailQuery
+    var queryOrder: Integer = 0
+    attributes.map(
+      attr => {
+        val carbonDimension = carbonTable.getDimensionByName(carbonTable.getFactTableName
+          , attr.name)
+        if (carbonDimension != null) {
+          // TODO if we can add ordina in carbonDimension, it will be good
+          allDims += attr.name
+          val dim = new QueryDimension(attr.name)
+          dim.setQueryOrder(queryOrder);
+          queryOrder = queryOrder + 1
+          selectedDims += dim
+        } else {
+          val carbonMeasure = carbonTable.getMeasureByName(carbonTable.getFactTableName()
+            , attr.name)
+          if (carbonMeasure != null) {
+            val m1 = new QueryMeasure(attr.name)
+            m1.setQueryOrder(queryOrder);
+            queryOrder = queryOrder + 1
+            selectedMsrs += m1
+          }
+        }
+      })
+    queryOrder = 0
+    // Separately handle group by columns, known or unknown partial aggregations and other
+    // expressions. All single column & known aggregate expressions will use native aggregates for
+    // measure and dimensions
+    // Unknown aggregates & Expressions will use custom aggregator
+    aggExprs match {
+      case Some(a: Seq[Expression]) if (!forceDetailedQuery) =>
+        a.foreach {
+          case attr@AttributeReference(_, _, _, _) => // Add all the references to carbon query
+            val carbonDimension = selectedDims
+                                  .filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+            if (carbonDimension.size > 0) {
+              val dim = new QueryDimension(attr.name)
+              dim.setQueryOrder(queryOrder);
+              plan.addDimension(dim);
+              queryOrder = queryOrder + 1
+            } else {
+              val carbonMeasure = selectedMsrs
+                                  .filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+              if (carbonMeasure.size > 0) {
+                // added by vishal as we are adding for dimension so need to add to measure list
+                // Carbon does not support group by on measure column so throwing exception to
+                // make it detail query
+                throw new
+                    Exception("Some Aggregate functions cannot be pushed, force to detailequery")
+              }
+              else {
+                // Some unknown attribute name is found. this may be a derived column.
+                // So, let's fall back to detailed query flow
+                throw new Exception(
+                  "Some attributes referred looks derived columns. So, force to detailequery " +
+                    attr.name)
+              }
+            }
+            outputColumns += attr
+          case par: Alias if par.children(0).isInstanceOf[AggregateExpression1] =>
+            outputColumns += par.toAttribute
+            queryOrder = processAggregateExpr(plan,
+              par.children(0).asInstanceOf[AggregateExpression1], queryOrder)
+
+          case _ => forceDetailedQuery = true
+        }
+      case _ => forceDetailedQuery = true
+    }
+
+    if (forceDetailedQuery) {
+      // First clear the model if Msrs, Expressions and AggDimAggInfo filled
+      plan.getDimensions().clear();
+      plan.getMeasures().clear();
+      plan.getDimAggregatorInfos().clear();
+      plan.getExpressions().clear()
+
+      // Fill the selected dimensions & measures obtained from
+      // attributes to query plan  for detailed query
+      selectedDims.foreach(plan.addDimension(_))
+      selectedMsrs.foreach(plan.addMeasure(_))
+    }
+    else {
+      attributes = outputColumns.toSeq;
+    }
+
+    val orderList = new ArrayList[QueryDimension]()
+
+    var allSortExprPushed = true;
+    sortExprs match {
+      case Some(a: Seq[SortOrder]) =>
+        a.foreach {
+          case SortOrder(SumCarbon(attr: AttributeReference, _), order) =>
+            plan.getMeasures().asScala.filter(m => m.getColumnName()
+                                                   .equalsIgnoreCase(attr.name))(0)
+                                                   .setSortOrder(getSortDirection(order))
+          case SortOrder(CountCarbon(attr: AttributeReference), order) =>
+            plan.getMeasures().asScala.filter(m => m.getColumnName
+                                                   .equalsIgnoreCase(attr.name))(0)
+                                                   .setSortOrder(getSortDirection(order))
+          case SortOrder(CountDistinctCarbon(attr: AttributeReference), order) =>
+            plan.getMeasures().asScala.filter(m => m.getColumnName
+                                                   .equalsIgnoreCase(attr.name))(0)
+                                                   .setSortOrder(getSortDirection(order))
+          case SortOrder(AverageCarbon(attr: AttributeReference, _), order) =>
+            plan.getMeasures().asScala.filter(m => m.getColumnName
+                                                   .equalsIgnoreCase(attr.name))(0)
+                                                   .setSortOrder(getSortDirection(order))
+          case SortOrder(attr: AttributeReference, order) =>
+            val dim = plan.getDimensions
+                      .asScala.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+            if (!dim.isEmpty) {
+              dim(0).setSortOrder(getSortDirection(order))
+              orderList.add(dim(0))
+            } else {
+              allSortExprPushed = false;
+            }
+          case _ => allSortExprPushed = false;
+        }
+      case _ =>
+    }
+
+    plan.setSortedDimemsions(orderList)
+
+    // limit can be pushed down only if sort is not present or all sort expressions are pushed
+    if (allSortExprPushed) limitExpr match {
+      case Some(IntegerLiteral(limit)) =>
+        if (plan.getMeasures.size() == 0 && plan.getDimAggregatorInfos.size() == 0) {
+          plan.setLimit(limit)
+        }
+      case _ =>
+    }
+    plan.setDetailQuery(forceDetailedQuery);
+    plan.setOutLocationPath(
+      CarbonProperties.getInstance().getProperty(CarbonCommonConstants.STORE_LOCATION_HDFS));
+    plan.setQueryId(System.nanoTime() + "");
+    processFilterExpressions(plan)
+    plan
+  }
+
+  def processFilterExpressions(plan: CarbonQueryPlan) {
+    if (!dimensionPredicates.isEmpty) {
+      val exps = preProcessExpressions(dimensionPredicates)
+      val expressionVal = transformExpression(exps.head)
+      // adding dimension used in expression in querystats
+      expressionVal.getChildren.asScala.filter { x => x.isInstanceOf[CarbonColumnExpression] }
+      .map { y => allDims += y.asInstanceOf[CarbonColumnExpression].getColumnName }
+      plan.setFilterExpression(expressionVal)
+    }
+  }
+
   def processAggregateExpr(plan: CarbonQueryPlan, currentAggregate: AggregateExpression1,
-                           queryOrder: Int): Int = {
+    queryOrder: Int): Int = {
 
     currentAggregate match {
       case SumCarbon(posLiteral@PositionLiteral(attr: AttributeReference, _), _) =>
@@ -223,156 +377,9 @@ case class CarbonCubeScan(
         }
         posLiteral.setPosition(queryOrder)
         queryOrder + 1
-
       case _ => throw new
           Exception("Some Aggregate functions cannot be pushed, force to detailequery")
     }
-  }
-
-  val buildCarbonPlan: CarbonQueryPlan = {
-    val plan: CarbonQueryPlan = new CarbonQueryPlan(relation.schemaName, relation.cubeName)
-
-
-    var forceDetailedQuery = detailQuery
-    var queryOrder: Integer = 0
-    attributes.map(
-      attr => {
-        val carbonDimension = carbonTable.getDimensionByName(carbonTable.getFactTableName
-            , attr.name)
-        if (carbonDimension != null) {
-          // TODO if we can add ordina in carbonDimension, it will be good
-          allDims += attr.name
-          val dim = new QueryDimension(attr.name)
-          dim.setQueryOrder(queryOrder);
-          queryOrder = queryOrder + 1
-          selectedDims += dim
-        } else {
-          val carbonMeasure = carbonTable.getMeasureByName(carbonTable.getFactTableName()
-              , attr.name)
-          if (carbonMeasure != null) {
-            val m1 = new QueryMeasure(attr.name)
-            m1.setQueryOrder(queryOrder);
-            queryOrder = queryOrder + 1
-            selectedMsrs += m1
-          }
-        }
-      })
-    queryOrder = 0
-    // Separately handle group by columns, known or unknown partial aggregations and other
-    // expressions. All single column & known aggregate expressions will use native aggregates for
-    // measure and dimensions
-    // Unknown aggregates & Expressions will use custom aggregator
-    aggExprs match {
-      case Some(a: Seq[Expression]) if (!forceDetailedQuery) =>
-        a.foreach {
-          case attr@AttributeReference(_, _, _, _) => // Add all the references to carbon query
-            val carbonDimension = selectedDims
-              .filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-            if (carbonDimension.size > 0) {
-              val dim = new QueryDimension(attr.name)
-              dim.setQueryOrder(queryOrder);
-              plan.addDimension(dim);
-              queryOrder = queryOrder + 1
-            } else {
-              val carbonMeasure = selectedMsrs
-                .filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-              if (carbonMeasure.size > 0) {
-                // added by vishal as we are adding for dimension so need to add to measure list
-                // Carbon does not support group by on measure column so throwing exception to
-                // make it detail query
-                throw new
-                    Exception("Some Aggregate functions cannot be pushed, force to detailequery")
-              }
-              else {
-                // Some unknown attribute name is found. this may be a derived column.
-                // So, let's fall back to detailed query flow
-                throw new Exception(
-                  "Some attributes referred looks derived columns. So, force to detailequery " +
-                    attr.name)
-              }
-            }
-            outputColumns += attr
-          case par: Alias if par.children(0).isInstanceOf[AggregateExpression1] =>
-            outputColumns += par.toAttribute
-            queryOrder = processAggregateExpr(plan,
-              par.children(0).asInstanceOf[AggregateExpression1], queryOrder)
-
-          case _ => forceDetailedQuery = true
-        }
-      case _ => forceDetailedQuery = true
-    }
-
-    if (forceDetailedQuery) {
-      // First clear the model if Msrs, Expressions and AggDimAggInfo filled
-      plan.getDimensions().clear();
-      plan.getMeasures().clear();
-      plan.getDimAggregatorInfos().clear();
-      plan.getExpressions().clear()
-
-      // Fill the selected dimensions & measures obtained from
-      // attributes to query plan  for detailed query
-      selectedDims.foreach(plan.addDimension(_))
-      selectedMsrs.foreach(plan.addMeasure(_))
-    }
-    else {
-      attributes = outputColumns.toSeq;
-    }
-
-    val orderList = new ArrayList[QueryDimension]()
-
-    var allSortExprPushed = true;
-    sortExprs match {
-      case Some(a: Seq[SortOrder]) =>
-        a.foreach {
-          case SortOrder(SumCarbon(attr: AttributeReference, _), order) => plan.getMeasures()
-            .asScala.filter(m => m.getColumnName().equalsIgnoreCase(attr.name))(0)
-            .setSortOrder(getSortDirection(order))
-          case SortOrder(CountCarbon(attr: AttributeReference), order) => plan.getMeasures()
-            .asScala.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))(0)
-            .setSortOrder(getSortDirection(order))
-          case SortOrder(CountDistinctCarbon(attr: AttributeReference), order) => plan.getMeasures()
-            .asScala.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))(0)
-            .setSortOrder(getSortDirection(order))
-          case SortOrder(AverageCarbon(attr: AttributeReference, _), order) => plan.getMeasures()
-            .asScala.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))(0)
-            .setSortOrder(getSortDirection(order))
-          case SortOrder(attr: AttributeReference, order) =>
-            val dim = plan.getDimensions
-              .asScala.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-            if (!dim.isEmpty) {
-              dim(0).setSortOrder(getSortDirection(order))
-              orderList.add(dim(0))
-            } else {
-              allSortExprPushed = false;
-            }
-          case _ => allSortExprPushed = false;
-        }
-      case _ =>
-    }
-
-    plan.setSortedDimemsions(orderList)
-
-    // limit can be pushed down only if sort is not present or all sort expressions are pushed
-    if (allSortExprPushed) limitExpr match {
-      case Some(IntegerLiteral(limit)) =>
-        if (plan.getMeasures.size() == 0 && plan.getDimAggregatorInfos.size() == 0) {
-          plan.setLimit(limit)
-        }
-      case _ =>
-    }
-    plan.setDetailQuery(forceDetailedQuery);
-    plan.setOutLocationPath(
-      CarbonProperties.getInstance().getProperty(CarbonCommonConstants.STORE_LOCATION_HDFS));
-    plan.setQueryId(System.nanoTime() + "");
-    if (!dimensionPredicates.isEmpty) {
-      val exps = preProcessExpressions(dimensionPredicates)
-      val expressionVal = transformExpression(exps.head)
-      // adding dimension used in expression in querystats
-      expressionVal.getChildren.asScala.filter { x => x.isInstanceOf[CarbonColumnExpression] }
-        .map { y => allDims += y.asInstanceOf[CarbonColumnExpression].getColumnName }
-      plan.setFilterExpression(expressionVal)
-    }
-    plan
   }
 
   def preProcessExpressions(expressions: Seq[Expression]): Seq[Expression] = {
@@ -418,6 +425,7 @@ case class CarbonCubeScan(
           LessThanEqualToExpression(transformExpression(left), transformExpression(right))
       case AttributeReference(name, dataType, _, _) => new CarbonColumnExpression(name.toString,
         CarbonScalaUtil.convertSparkToCarbonDataType(dataType))
+      case FakeCarbonCast(literal, dataType) => transformExpression(literal)
       case Literal(name, dataType) => new
           CarbonLiteralExpression(name, CarbonScalaUtil.convertSparkToCarbonDataType(dataType))
       case Cast(left, right) if (!left.isInstanceOf[Literal]) => transformExpression(left)
@@ -439,7 +447,7 @@ case class CarbonCubeScan(
 
 
   def addPushdownFilters(keys: Seq[Expression], filters: Array[Array[Expression]],
-                         conditions: Option[Expression]) {
+    conditions: Option[Expression]) {
 
     // TODO Values in the IN filter is duplicate. replace the list with set
     val buffer = new ArrayBuffer[Expression]
@@ -458,6 +466,28 @@ case class CarbonCubeScan(
 
     extraPreds = Seq(cond)
   }
+
+  def output: Seq[Attribute] = {
+    attributes
+  }
+}
+
+case class CarbonCubeScan(attributesLocal: Seq[Attribute],
+  relation: CarbonRelation,
+  dimensionPredicates: Seq[Expression],
+  aggExprs: Option[Seq[Expression]],
+  sortExprs: Option[Seq[SortOrder]],
+  limitExpr: Option[Expression],
+  isGroupByPresent: Boolean,
+  detailQuery: Boolean = false)(@transient oc: SQLContext)
+  extends AbstractCubeScan(attributesLocal,
+    relation,
+    dimensionPredicates,
+    aggExprs,
+    sortExprs,
+    limitExpr,
+    isGroupByPresent,
+    detailQuery)(oc) {
 
   def inputRdd: CarbonQueryRDD[CarbonKey, CarbonValue] = {
     // Update the FilterExpressions with extra conditions added through join pushdown
@@ -531,10 +561,5 @@ case class CarbonCubeScan(
       }
     }
   }
-
-  def output: Seq[Attribute] = {
-    attributes
-  }
-
 }
 
