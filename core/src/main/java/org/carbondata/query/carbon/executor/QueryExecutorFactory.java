@@ -56,7 +56,7 @@ public class QueryExecutorFactory {
     else if (null == queryModel.getFilterExpressionResolverTree()
         && queryModel.getQueryDimension().size() == 0 && queryModel.getQueryMeasures().size() == 0
         && queryModel.getDimAggregationInfo().size() == 0
-        && queryModel.getExpressions().size() == 0) {
+        && queryModel.getExpressions().size() == 0 && !queryModel.isForcedDetailRawQuery()) {
       LOGGER.info("Function query: ");
       return new FunctionQueryExecutor();
     }

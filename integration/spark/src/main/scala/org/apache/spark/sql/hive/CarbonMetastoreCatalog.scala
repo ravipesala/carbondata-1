@@ -56,7 +56,7 @@ case class MetaData(var cubesMeta: ArrayBuffer[TableMeta])
 case class CarbonMetaData(dims: Seq[String],
   msrs: Seq[String],
   carbonTable: CarbonTable,
-  dictionaryMap: Map[String, Boolean])
+  dictionaryMap: DictionaryMap)
 
 case class TableMeta(carbonTableIdentifier: CarbonTableIdentifier, dataPath: String,
     var carbonTable: CarbonTable, partitioner: Partitioner)
@@ -90,6 +90,12 @@ object CarbonMetastoreCatalog {
     }
   }
 
+}
+
+case class DictionaryMap(dictionaryMap: Map[String, Boolean]) {
+  def get(name: String): Option[Boolean] = {
+    dictionaryMap.get(name.toLowerCase)
+  }
 }
 
 class CarbonMetastoreCatalog(hive: HiveContext, val storePath: String, client: ClientInterface)

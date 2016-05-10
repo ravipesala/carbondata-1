@@ -43,7 +43,7 @@ import org.carbondata.query.carbon.util.DataTypeUtil
  */
 case class CarbonDictionaryDecoder(relations: Map[String, CarbonDatasourceRelation],
   profile: CarbonProfile,
-  aliasMap: Map[String, Attribute],
+  aliasMap: Map[String, String],
   child: SparkPlan)
   (@transient sqlContext: SQLContext)
   extends UnaryNode {
@@ -53,17 +53,12 @@ case class CarbonDictionaryDecoder(relations: Map[String, CarbonDatasourceRelati
 
   override def output: Seq[Attribute] = {
     child.output.map { attr =>
-      var attrReference = attr.asInstanceOf[AttributeReference]
-      if (attrReference.qualifiers.size == 0) {
-        attrReference = aliasMap.get(attrReference.name) match {
-          case Some(attr: AttributeReference) => attr
-          case _ => attrReference
-        }
-      }
+      val attrReference = attr.asInstanceOf[AttributeReference]
 
-      if (attrReference.qualifiers.size > 0) {
-        val carbonTable: CarbonTable = relations.get(attrReference.qualifiers(0)).get.carbonRelation
-                                       .metaData.carbonTable
+      val qualifier = getValidQualifier(attrReference)
+
+      if (qualifier != null) {
+        val carbonTable = relations.get(qualifier).get.carbonRelation.metaData.carbonTable
         val carbonDimension = carbonTable
                               .getDimensionByName(carbonTable.getFactTableName, attr.name);
         if (carbonDimension != null && carbonDimension.getEncoder.contains(Encoding.DICTIONARY) &&
@@ -83,6 +78,25 @@ case class CarbonDictionaryDecoder(relations: Map[String, CarbonDatasourceRelati
         attr
       }
     }
+  }
+
+  def getValidQualifier(attrReference: AttributeReference): String = {
+    var qualifier: String = null
+    if (attrReference.qualifiers.size == 0) {
+      qualifier = aliasMap.get(attrReference.exprId.id.toString) match {
+        case Some(name) => name
+        case _ => null
+      }
+    } else {
+      qualifier = relations.get(attrReference.qualifiers(0)) match {
+        case Some(relation) => attrReference.qualifiers(0)
+        case _ => aliasMap.get(attrReference.exprId.id.toString) match {
+          case Some(name) => name
+          case _ => null
+        }
+      }
+    }
+    qualifier
   }
 
   def canBeDecoded(attr: Attribute): Boolean = {
@@ -111,20 +125,17 @@ case class CarbonDictionaryDecoder(relations: Map[String, CarbonDatasourceRelati
     val attributes = child.output
     val dictIds: Array[(String, String, DataType)] = attributes.map(attr => {
       var attrReference = attr.asInstanceOf[AttributeReference]
-      if (attrReference.qualifiers.size == 0) {
-        attrReference = aliasMap.get(attrReference.name) match {
-          case Some(attr: AttributeReference) => attr
-          case _ => attrReference
-        }
-      }
-      if (attrReference.qualifiers.size > 0) {
-        val carbonTable = relations.get(attrReference.qualifiers(0))
+
+      val qualifier = getValidQualifier(attrReference)
+
+      if (qualifier != null) {
+        val carbonTable = relations.get(qualifier)
                           .get.carbonRelation.metaData.carbonTable
         val carbonDimension =
           carbonTable.getDimensionByName(carbonTable.getFactTableName, attr.name);
         if (carbonDimension != null && carbonDimension.hasEncoding(Encoding.DICTIONARY) &&
           canBeDecoded(attr)) {
-          (attrReference.qualifiers(0), carbonDimension.getColumnId, carbonDimension.getDataType)
+          (qualifier, carbonDimension.getColumnId, carbonDimension.getDataType)
         } else {
           (null, null, null)
         }

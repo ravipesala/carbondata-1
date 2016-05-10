@@ -229,6 +229,7 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
             if (measure != null) {
               val qMsr = new QueryMeasure(measure.getColName)
               qMsr.setQueryOrder(order)
+              plan.addMeasure(qMsr)
               order += 1
               attributeOut += attr
             }
@@ -297,6 +298,7 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
           others.collect {
             case attr: AttributeReference => attributesNeedToDecode.add(attr)
           }
+          unprocessedExprs += others
           None
       }
     }
