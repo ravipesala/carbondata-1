@@ -74,6 +74,8 @@ abstract class AbstractCubeScan(var attributes: Seq[Attribute],
   @transient val carbonCatalog = sqlContext.catalog.asInstanceOf[CarbonMetastoreCatalog]
 
   val attributesNeedToDecode = new util.HashSet[AttributeReference]()
+  val unprocessedExprs = new ArrayBuffer[Expression]()
+
   val buildCarbonPlan: CarbonQueryPlan = {
     val plan: CarbonQueryPlan = new CarbonQueryPlan(relation.schemaName, relation.cubeName)
 

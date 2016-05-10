@@ -19,9 +19,11 @@
 package org.apache.spark.sql.hive
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, _}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, QueryPlanner}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{Filter, Project, SparkPlan}
@@ -52,7 +54,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
           carbonRawScan(projectList,
             predicates,
             carbonRelation,
-            None,
+            l,
             None,
             None,
             false,
@@ -67,7 +69,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         PhysicalOperation(projectList, predicates,
         l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _))) =>
           handleRawAggregation(plan, plan, projectList, predicates, carbonRelation,
-            partialComputation, groupingExpressions, namedGroupingAttributes,
+            l, partialComputation, groupingExpressions, namedGroupingAttributes,
             rewrittenAggregateExpressions)
         case CarbonDictionaryCatalystDecoder(relations, profile, aliasMap, child) =>
           CarbonDictionaryDecoder(relations, profile, aliasMap, planLater(child))(sqlContext) :: Nil
@@ -82,6 +84,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
       projectList: Seq[NamedExpression],
       predicates: Seq[Expression],
       carbonRelation: CarbonDatasourceRelation,
+      logicalRelation: LogicalRelation,
       partialComputation: Seq[NamedExpression],
       groupingExpressions: Seq[Expression],
       namedGroupingAttributes: Seq[Attribute],
@@ -94,8 +97,8 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
           carbonRawScan(projectList,
             predicates,
             carbonRelation,
+            logicalRelation,
             Some(partialComputation),
-            substitutesortExprs,
             limitExpr,
             !groupingExpressions.isEmpty,
             false,
@@ -130,8 +133,8 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
     private def carbonRawScan(projectList: Seq[NamedExpression],
       predicates: Seq[Expression],
       relation: CarbonDatasourceRelation,
+      logicalRelation: LogicalRelation,
       groupExprs: Option[Seq[Expression]],
-      substitutesortExprs: Option[Seq[SortOrder]],
       limitExpr: Option[Expression],
       isGroupByPresent: Boolean,
       detailQuery: Boolean,
@@ -139,59 +142,83 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
 
       val tableName: String =
         relation.carbonRelation.metaData.carbonTable.getFactTableName.toLowerCase
-      if (detailQuery == false) {
-        val projectSet = AttributeSet(projectList.flatMap(_.references))
-        val s = CarbonRawCubeScan(
-          projectSet.toSeq,
-          relation.carbonRelation,
-          predicates,
-          groupExprs,
-          substitutesortExprs,
-          limitExpr,
-          isGroupByPresent,
-          detailQuery,
-          useBinaryAggregation)(sqlContext)
-        if (s.attributesNeedToDecode.size() > 0) {
-          val relations = Seq((tableName, relation)).toMap
-          val attrs = s.attributesNeedToDecode.asScala.toSeq.map { attr =>
-            AttributeReference(attr.name,
-              attr.dataType,
-              attr.nullable,
-              attr.metadata)(attr.exprId, Seq(tableName))
-          }
-          val predExpr = predicates.reduceLeft(And)
-          (Project(projectList, Filter(predicates.reduceLeft(And),
-            CarbonDictionaryDecoder(relations, IncludeProfile(attrs), Map(), s)(sc))),
-            true)
-        } else {
-          (s, s.buildCarbonPlan.getDimAggregatorInfos.size() > 0)
-        }
-
+      // Check out any expressions are there in project list. if they are present then we need to
+      // decode them as well.
+      val projectExprsNeedToDecode = new java.util.HashSet[Attribute]()
+      projectList.map {
+        case attr: AttributeReference =>
+        case Alias(attr: AttributeReference, _) =>
+        case others =>
+          others.references.map(f => projectExprsNeedToDecode.add(f))
       }
-      else {
-        val projectSet = AttributeSet(projectList.flatMap(_.references))
-        val s = CarbonRawCubeScan(projectSet.toSeq,
-          relation.carbonRelation,
-          predicates,
-          groupExprs,
-          substitutesortExprs,
-          limitExpr,
-          isGroupByPresent,
-          detailQuery,
-          useBinaryAggregation)(sqlContext)
-        if (s.attributesNeedToDecode.size() > 0) {
+      val projectSet = AttributeSet(projectList.flatMap(_.references))
+      val filterSet = AttributeSet(predicates.flatMap(_.references))
+      val filterCondition = predicates.reduceLeftOption(expressions.And)
+      var filtersSubset = true
+      val requestedColumns = {
+        if (projectList.map(_.toAttribute) == projectList &&
+          projectSet.size == projectList.size &&
+          filterSet.subsetOf(projectSet)) {
+          projectList.asInstanceOf[Seq[Attribute]] // Safe due to if above.
+        } else {
+          filtersSubset = false
+          (projectSet ++ filterSet).toSeq
+        }
+      }
+      val scan = CarbonRawCubeScan(projectSet.toSeq,
+        relation.carbonRelation,
+        predicates,
+        groupExprs,
+        None,
+        limitExpr,
+        isGroupByPresent,
+        detailQuery,
+        useBinaryAggregation)(sqlContext)
+      val dimAggrsPresence: Boolean = scan.buildCarbonPlan.getDimAggregatorInfos.size() > 0
+      projectExprsNeedToDecode.addAll(scan.attributesNeedToDecode)
+      if (detailQuery == false) {
+        if (projectExprsNeedToDecode.size > 0) {
           val relations = Seq((tableName, relation)).toMap
-          val attrs = s.attributesNeedToDecode.asScala.toSeq.map { attr =>
+          val aliasMap = new ArrayBuffer[(String, String)]()
+          val attrs = projectExprsNeedToDecode.asScala.toSeq.map { attr =>
+            aliasMap += ((attr.exprId.id.toString, tableName))
             AttributeReference(attr.name,
               attr.dataType,
               attr.nullable,
               attr.metadata)(attr.exprId, Seq(tableName))
           }
-          (Project(projectList, Filter(predicates.reduceLeft(And),
-            CarbonDictionaryDecoder(relations, IncludeProfile(attrs), Map(), s)(sc))),
-            true)
+          val decoder =
+            CarbonDictionaryDecoder(relations, IncludeProfile(attrs), aliasMap.toMap, scan)(sc)
+          if (scan.unprocessedExprs.size > 0) {
+            val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
+            (Project(projectList, filterCondToAdd.map(Filter(_, decoder)).getOrElse(decoder)), true)
+          } else {
+            (Project(projectList, decoder), true)
+          }
         } else {
-          (Project(projectList, s), s.buildCarbonPlan.getDimAggregatorInfos.size() > 0)
+          (scan, dimAggrsPresence)
+        }
+      } else {
+        if (projectExprsNeedToDecode.size() > 0) {
+          val relations = Seq((tableName, relation)).toMap
+          val aliasMap = new ArrayBuffer[(String, String)]()
+          val attrs = projectExprsNeedToDecode.asScala.toSeq.map { attr =>
+            aliasMap += ((attr.exprId.id.toString, tableName))
+            AttributeReference(attr.name,
+              attr.dataType,
+              attr.nullable,
+              attr.metadata)(attr.exprId, Seq(tableName))
+          }
+          val decoder =
+            CarbonDictionaryDecoder(relations, IncludeProfile(attrs), aliasMap.toMap, scan)(sc)
+          if (scan.unprocessedExprs.size > 0) {
+            val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
+            (Project(projectList, filterCondToAdd.map(Filter(_, decoder)).getOrElse(decoder)), true)
+          } else {
+            (Project(projectList, decoder), true)
+          }
+        } else {
+          (Project(projectList, scan), dimAggrsPresence)
         }
       }
     }

@@ -60,7 +60,7 @@ case class MetaData(var cubesMeta: ArrayBuffer[TableMeta])
 case class CarbonMetaData(dims: Seq[String],
   msrs: Seq[String],
   carbonTable: CarbonTable,
-  dictionaryMap: Map[String, Boolean])
+  dictionaryMap: DictionaryMap)
 
 case class TableMeta(carbonTableIdentifier: CarbonTableIdentifier,
   dataPath: String,
@@ -68,6 +68,12 @@ case class TableMeta(carbonTableIdentifier: CarbonTableIdentifier,
   partitioner: Partitioner,
   schema: CarbonDef.Schema = null,
   var cube: Cube = null)
+
+case class DictionaryMap(dictionaryMap: Map[String, Boolean]) {
+  def get(name: String): Option[Boolean] = {
+    dictionaryMap.get(name.toLowerCase)
+  }
+}
 
 object CarbonMetastoreCatalog {
 

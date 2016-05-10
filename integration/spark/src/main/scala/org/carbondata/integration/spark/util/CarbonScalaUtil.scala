@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.cubemodel.Level
-import org.apache.spark.sql.hive.CarbonMetaData
+import org.apache.spark.sql.hive.{CarbonMetaData, DictionaryMap}
 import org.apache.spark.sql.types._
 
 import org.carbondata.core.carbon.metadata.datatype.DataType
@@ -118,17 +118,15 @@ object CarbonScalaUtil {
 
     def createSparkMeta(carbonTable: CarbonTable): CarbonMetaData = {
       val dimensionsAttr = carbonTable.getDimensionByTableName(carbonTable.getFactTableName)
-        .asScala.map(x => x.getColName) // wf : may be problem
+                           .asScala.map(x => x.getColName) // wf : may be problem
       val measureAttr = carbonTable.getMeasureByTableName(carbonTable.getFactTableName)
-          .asScala.map(x => x.getColName)
-      val dictionaryMap = carbonTable
-                          .getDimensionByTableName(carbonTable.getFactTableName)
-                          .asScala.map { f =>
-                            (f.getColName, f.hasEncoding(Encoding.DICTIONARY))
-                          }.toMap
-      CarbonMetaData(dimensionsAttr, measureAttr, carbonTable, dictionaryMap)
+                        .asScala.map(x => x.getColName)
+      val dictionary =
+        carbonTable.getDimensionByTableName(carbonTable.getFactTableName).asScala.map { f =>
+        (f.getColName.toLowerCase, f.hasEncoding(Encoding.DICTIONARY))
+      }
+      CarbonMetaData(dimensionsAttr, measureAttr, carbonTable, DictionaryMap(dictionary.toMap))
     }
-
   }
 
 }
