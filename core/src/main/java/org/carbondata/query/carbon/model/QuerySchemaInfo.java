@@ -22,9 +22,6 @@ import java.io.Serializable;
 
 import org.carbondata.core.keygenerator.KeyGenerator;
 
-/**
- * Created by root1 on 5/5/16.
- */
 public class QuerySchemaInfo implements Serializable {
 
   private int[] maskedByteIndexes;

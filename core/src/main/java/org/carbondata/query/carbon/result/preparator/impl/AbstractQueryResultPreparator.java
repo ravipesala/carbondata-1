@@ -11,9 +11,6 @@ import org.carbondata.query.carbon.result.preparator.QueryResultPreparator;
 import org.carbondata.query.scanner.impl.CarbonKey;
 import org.carbondata.query.scanner.impl.CarbonValue;
 
-/**
- * Created by root1 on 28/4/16.
- */
 public abstract class AbstractQueryResultPreparator<E> implements QueryResultPreparator<E> {
 
   /**

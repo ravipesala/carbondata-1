@@ -30,10 +30,9 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier}
 import org.carbondata.core.constants.CarbonCommonConstants
 import org.carbondata.integration.spark.{RawKeyVal, RawKeyValImpl}
-import org.carbondata.integration.spark.query.CarbonQueryPlan
 import org.carbondata.integration.spark.rdd.CarbonRawQueryRDD
-import org.carbondata.integration.spark.util.{CarbonQueryUtil, CarbonScalaUtil}
-import org.carbondata.query.carbon.model.{QueryDimension, QueryMeasure, QuerySchemaInfo}
+import org.carbondata.integration.spark.util.CarbonScalaUtil
+import org.carbondata.query.carbon.model._
 import org.carbondata.query.carbon.result.BatchRawResult
 import org.carbondata.query.carbon.wrappers.ByteArrayWrapper
 import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression, Expression => CarbonExpression, LiteralExpression => CarbonLiteralExpression}
@@ -313,7 +312,7 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
         new CarbonTableIdentifier(carbonTable.getDatabaseName,
           carbonTable.getFactTableName))
 
-    val model = CarbonQueryUtil.createQueryModel(
+    val model = QueryModel.createModel(
       absoluteTableIdentifier, buildCarbonPlan, carbonTable)
     model.setForcedDetailRawQuery(true)
     model.setDetailQuery(false)

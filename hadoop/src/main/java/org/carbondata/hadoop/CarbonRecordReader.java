@@ -7,7 +7,6 @@ import java.util.List;
 import org.carbondata.core.carbon.datastore.block.TableBlockInfo;
 import org.carbondata.core.iterator.CarbonIterator;
 import org.carbondata.hadoop.readsupport.CarbonReadSupport;
-import org.carbondata.hadoop.util.CarbonInputFormatUtil;
 import org.carbondata.query.carbon.executor.QueryExecutorFactory;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
 import org.carbondata.query.carbon.model.QueryModel;
@@ -43,7 +42,7 @@ public class CarbonRecordReader<T> extends RecordReader<Void, T> {
             carbonInputSplit.getSegmentId(), carbonInputSplit.getLocations(),
             carbonInputSplit.getLength()));
     queryModel.setTableBlockInfos(tableBlockInfoList);
-    readSupport.intialize(CarbonInputFormatUtil.getProjectionColumns(queryModel),
+    readSupport.intialize(queryModel.getProjectionColumns(),
         queryModel.getAbsoluteTableIdentifier());
     try {
       carbonIterator = new ChunkRawRowIterartor(

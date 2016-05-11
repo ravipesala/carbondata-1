@@ -4,9 +4,6 @@ import org.carbondata.core.carbon.AbsoluteTableIdentifier;
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonColumn;
 import org.carbondata.hadoop.readsupport.CarbonReadSupport;
 
-/**
- * Created by root1 on 1/5/16.
- */
 public class RawDataReadSupport implements CarbonReadSupport<Object[]> {
 
   @Override public void intialize(CarbonColumn[] carbonColumns,

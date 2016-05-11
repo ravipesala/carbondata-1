@@ -4,7 +4,7 @@ import org.carbondata.core.carbon.AbsoluteTableIdentifier;
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonColumn;
 
 /**
- * Created by root1 on 1/5/16.
+ * It converts to the desired class while reading the rows from RecordReader
  */
 public interface CarbonReadSupport<T> {
 

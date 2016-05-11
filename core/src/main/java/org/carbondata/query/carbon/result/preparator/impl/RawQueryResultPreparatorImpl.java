@@ -56,10 +56,8 @@ public class RawQueryResultPreparatorImpl extends AbstractQueryResultPreparator<
     if ((null == scannedResult || scannedResult.size() < 1)) {
       return new BatchRawResult(new Object[0][0]);
     }
-    List<QueryDimension> queryDimensions = queryModel.getQueryDimension();
-    int dimensionCount = queryDimensions.size();
     int msrSize = queryExecuterProperties.measureAggregators.length;
-    int totalNumberOfColumn = 1 + msrSize;
+    int totalNumberOfColumn = msrSize + 1;
     Object[][] resultData = new Object[scannedResult.size()][totalNumberOfColumn];
     int currentRow = 0;
     ByteArrayWrapper key = null;

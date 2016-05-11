@@ -6,9 +6,6 @@ import org.carbondata.hadoop.readsupport.CarbonReadSupport;
 
 import org.apache.hadoop.io.ArrayWritable;
 
-/**
- * Created by root1 on 1/5/16.
- */
 public class ArrayWritableReadSupport implements CarbonReadSupport<ArrayWritable> {
 
   @Override public void intialize(CarbonColumn[] carbonColumns,

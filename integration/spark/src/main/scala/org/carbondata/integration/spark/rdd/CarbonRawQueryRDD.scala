@@ -17,9 +17,7 @@
 
 package org.carbondata.integration.spark.rdd
 
-import java.text.SimpleDateFormat
 import java.util
-import java.util.Date
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
@@ -34,42 +32,39 @@ import org.carbondata.query.carbon.result.BatchRawResult
 import org.carbondata.query.expression.Expression
 
 
- /**
-  * This RDD is used to perform query with raw data, it means it doesn't convert dictionary values
-  * to actual data.
-  * @param sc
-  * @param queryModel
-  * @param filterExpression
-  * @param keyClass
-  * @param conf
-  * @param cubeCreationTime
-  * @param schemaLastUpdatedTime
-  * @param baseStoreLocation
-  * @tparam K
-  * @tparam V
-  */
+/**
+ * This RDD is used to perform query with raw data, it means it doesn't convert dictionary values
+ * to actual data.
+ *
+ * @param sc
+ * @param queryModel
+ * @param filterExpression
+ * @param keyClass
+ * @param conf
+ * @param cubeCreationTime
+ * @param schemaLastUpdatedTime
+ * @param baseStoreLocation
+ * @tparam K
+ * @tparam V
+ */
 class CarbonRawQueryRDD[K, V](
-                               sc: SparkContext,
-                               queryModel: QueryModel,
-                               filterExpression: Expression,
-                               keyClass: RawKeyVal[K, V],
-                               @transient conf: Configuration,
-                               cubeCreationTime: Long,
-                               schemaLastUpdatedTime: Long,
-                               baseStoreLocation: String)
-  extends  CarbonQueryRDD[K, V](sc,
-                                queryModel,
-                                filterExpression,
-                                null,
-                                conf,
-                                cubeCreationTime,
-                                schemaLastUpdatedTime,
-                                baseStoreLocation) with Logging {
+  sc: SparkContext,
+  queryModel: QueryModel,
+  filterExpression: Expression,
+  keyClass: RawKeyVal[K, V],
+  @transient conf: Configuration,
+  cubeCreationTime: Long,
+  schemaLastUpdatedTime: Long,
+  baseStoreLocation: String)
+  extends CarbonQueryRDD[K, V](sc,
+    queryModel,
+    filterExpression,
+    null,
+    conf,
+    cubeCreationTime,
+    schemaLastUpdatedTime,
+    baseStoreLocation) with Logging {
 
-  private val jobtrackerId: String = {
-    val formatter = new SimpleDateFormat("yyyyMMddHHmm")
-    formatter.format(new Date())
-  }
 
   override def compute(thepartition: Partition, context: TaskContext): Iterator[(K, V)] = {
     val LOGGER = LogServiceFactory.getLogService(this.getClass().getName());
@@ -96,8 +91,8 @@ class CarbonRawQueryRDD[K, V](
         logInfo("*************************" + carbonPropertiesFilePath)
         if (null == carbonPropertiesFilePath) {
           System.setProperty("carbon.properties.filepath", System.getProperty("user.dir")
-                                                           + '/' + "conf" + '/' +
-                                                           "carbon.properties"
+            + '/' + "conf" + '/' +
+            "carbon.properties"
           );
         }
         // execute query
@@ -137,7 +132,7 @@ class CarbonRawQueryRDD[K, V](
       }
 
       logInfo("*************************** Total Time Taken to execute the query in Carbon Side: " +
-              (System.currentTimeMillis - queryStartTime)
+        (System.currentTimeMillis - queryStartTime)
       )
     }
     iter
