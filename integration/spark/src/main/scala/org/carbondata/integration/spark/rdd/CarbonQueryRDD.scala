@@ -97,8 +97,7 @@ class CarbonSparkPartition(rddId: Int, val idx: Int,
         tableBlockInfoList.add(new TableBlockInfo(carbonInputSplit.getPath.toString,
           carbonInputSplit.getStart,
           carbonInputSplit.getSegmentId, carbonInputSplit.getLocations, carbonInputSplit.getLength
-        )
-        )
+        ))
         queryModel.setTableBlockInfos(tableBlockInfoList)
         queryStartTime = System.currentTimeMillis
 

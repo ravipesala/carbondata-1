@@ -31,9 +31,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-/**
- * Created by root1 on 2/5/16.
- */
 public class ObjectSerializationUtilTest extends TestCase {
 
   @Before public void setUp() throws Exception {

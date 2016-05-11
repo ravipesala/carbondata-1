@@ -12,7 +12,7 @@ import org.carbondata.query.carbon.result.BatchRawResult;
 import org.carbondata.query.carbon.result.iterator.DetailRawQueryResultIterator;
 
 /**
- * Created by root1 on 28/4/16.
+ * Executor for raw records, it does not parse to actual data
  */
 public class DetailRawRecordQueryExcecutor extends AbstractQueryExecutor<BatchRawResult> {
 

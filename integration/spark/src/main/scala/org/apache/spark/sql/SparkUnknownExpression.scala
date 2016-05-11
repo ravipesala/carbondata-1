@@ -25,14 +25,14 @@ import org.apache.spark.sql.catalyst.expressions.{Expression => SparkExpression,
 
 import org.carbondata.integration.spark.util.CarbonScalaUtil
 import org.carbondata.query.carbonfilterinterface.{ExpressionType, RowIntf}
-import org.carbondata.query.expression.{ColumnExpression, Expression, ExpressionResult}
+import org.carbondata.query.expression.{ColumnExpression, ExpressionResult, UnknownExpression}
 import org.carbondata.query.expression.conditional.ConditionalExpression
 import org.carbondata.query.expression.exception.FilterUnsupportedException
 
 
 
 class SparkUnknownExpression(sparkExp: SparkExpression)
-  extends Expression with ConditionalExpression {
+  extends UnknownExpression with ConditionalExpression {
 
   children.addAll(getColumnList())
 

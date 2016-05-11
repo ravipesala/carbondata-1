@@ -42,14 +42,14 @@ import org.carbondata.core.carbon.metadata.schema.table.CarbonTable;
 import org.carbondata.core.carbon.path.CarbonStorePath;
 import org.carbondata.core.carbon.path.CarbonTablePath;
 import org.carbondata.core.keygenerator.KeyGenException;
-import org.carbondata.hadoop.exception.CarbonInputFormatException;
 import org.carbondata.hadoop.readsupport.CarbonReadSupport;
-import org.carbondata.hadoop.readsupport.impl.DictionaryDecodeReadSupport;
+import org.carbondata.hadoop.readsupport.impl.DictionaryDecodedReadSupportImpl;
 import org.carbondata.hadoop.util.CarbonInputFormatUtil;
 import org.carbondata.hadoop.util.ObjectSerializationUtil;
 import org.carbondata.hadoop.util.SchemaReader;
 import org.carbondata.lcm.status.SegmentStatusManager;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
+import org.carbondata.query.carbon.model.CarbonQueryPlan;
 import org.carbondata.query.carbon.model.QueryModel;
 import org.carbondata.query.expression.Expression;
 import org.carbondata.query.filter.resolver.FilterResolverIntf;
@@ -77,7 +77,6 @@ import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.security.TokenCache;
 import org.apache.hadoop.mapreduce.task.JobContextImpl;
 import org.apache.hadoop.util.StringUtils;
-
 
 /**
  * Carbon Input format class representing one carbon table
@@ -251,6 +250,7 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
 
   /**
    * get total number of rows. Same as count(*)
+   *
    * @throws IOException
    * @throws IndexBuilderException
    */
@@ -258,8 +258,11 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
 
     long rowCount = 0;
     AbsoluteTableIdentifier absoluteTableIdentifier =
-        new AbsoluteTableIdentifier(
-            getStorePathString(job.getConfiguration()), getTableToAccess(job.getConfiguration()));
+        getAbsoluteTableIdentifier(job.getConfiguration());
+    SegmentStatusManager.ValidSegmentsInfo validSegments =
+        new SegmentStatusManager(getAbsoluteTableIdentifier(job.getConfiguration()))
+            .getValidSegments();
+    setSegmentsToAccess(job.getConfiguration(), validSegments.listOfValidSegments);
 
     //for each segment fetch blocks matching filter in Driver BTree
     for (int segmentNo : getValidSegments(job)) {
@@ -285,7 +288,7 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
   public FilterResolverIntf getResolvedFilter(Configuration configuration,
       Expression filterExpression)
       throws IOException, IndexBuilderException, QueryExecutionException {
-    if(filterExpression == null) {
+    if (filterExpression == null) {
       return null;
     }
     FilterExpressionProcessor filterExpressionProcessor = new FilterExpressionProcessor();
@@ -306,13 +309,12 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
    * @param configuration
    * @param filterExpression
    */
-  public static void setFilterPredicates(Configuration configuration, Expression filterExpression)
-      throws CarbonInputFormatException {
+  public static void setFilterPredicates(Configuration configuration, Expression filterExpression) {
     try {
       String filterString = ObjectSerializationUtil.convertObjectToString(filterExpression);
       configuration.set(FILTER_PREDICATE, filterString);
     } catch (Exception e) {
-      throw new CarbonInputFormatException("Error while setting filter expression to Job", e);
+      throw new RuntimeException("Error while setting filter expression to Job", e);
     }
   }
 
@@ -323,20 +325,19 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
    * @param filterExpression
    */
   public static void setFilterPredicates(Configuration configuration,
-      FilterResolverIntf filterExpression) throws CarbonInputFormatException {
+      FilterResolverIntf filterExpression) {
     try {
-      if(filterExpression == null) {
+      if (filterExpression == null) {
         return;
       }
       String filterString = ObjectSerializationUtil.convertObjectToString(filterExpression);
       configuration.set(FILTER_PREDICATE, filterString);
     } catch (Exception e) {
-      throw new CarbonInputFormatException("Error while setting filter expression to Job", e);
+      throw new RuntimeException("Error while setting filter expression to Job", e);
     }
   }
 
-  private Object getFilterPredicates(Configuration configuration)
-      throws CarbonInputFormatException {
+  private Object getFilterPredicates(Configuration configuration) {
     try {
       String filterExprString = configuration.get(FILTER_PREDICATE);
       if (filterExprString == null) {
@@ -345,7 +346,7 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
       Object filterExprs = ObjectSerializationUtil.convertStringToObject(filterExprString);
       return filterExprs;
     } catch (IOException e) {
-      throw new CarbonInputFormatException("Error while reading filter expression", e);
+      throw new RuntimeException("Error while reading filter expression", e);
     }
   }
 
@@ -388,7 +389,7 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
 
       List<DataRefNode> filterredBlocks = null;
       // if no filter is given get all blocks from Btree Index
-      if(null == resolver){
+      if (null == resolver) {
         filterredBlocks = getDataBlocksOfIndex(abstractIndex);
       } else {
         // apply filter and get matching blocks
@@ -449,8 +450,8 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
       IndexKey endIndexKey = FilterUtil.prepareDefaultEndIndexKey(segmentProperties);
 
       // Add all blocks of btree into result
-      DataRefNodeFinder blockFinder = new BTreeDataRefNodeFinder(
-          segmentProperties.getDimensionColumnsValueSize());
+      DataRefNodeFinder blockFinder =
+          new BTreeDataRefNodeFinder(segmentProperties.getDimensionColumnsValueSize());
       DataRefNode startBlock =
           blockFinder.findFirstDataBlock(abstractIndex.getDataRefNode(), startIndexKey);
       DataRefNode endBlock =
@@ -473,9 +474,11 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
     CarbonTable carbonTable = getCarbonTable(configuration);
     QueryModel queryModel;
     try {
-      queryModel = CarbonInputFormatUtil
-          .createQueryModel(getAbsoluteTableIdentifier(configuration), carbonTable,
-              configuration.get(COLUMN_PROJECTION));
+      CarbonQueryPlan queryPlan =
+          CarbonInputFormatUtil.createQueryPlan(carbonTable, configuration.get(COLUMN_PROJECTION));
+      queryModel = QueryModel.createModel(getAbsoluteTableIdentifier(configuration),
+          queryPlan,
+          carbonTable);
       Object filterPredicates = getFilterPredicates(configuration);
       if (filterPredicates != null) {
         if (filterPredicates instanceof Expression) {
@@ -497,17 +500,22 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
   private CarbonReadSupport getReadSupportClass(Configuration configuration) {
     String readSupportClass = configuration.get(CARBON_READ_SUPPORT);
     //By default it uses dictionary decoder read class
-    CarbonReadSupport readSupport = new DictionaryDecodeReadSupport();
+    CarbonReadSupport readSupport = null;
     if (readSupportClass != null) {
       try {
         Class<?> myClass = Class.forName(readSupportClass);
         Constructor<?> constructor = myClass.getConstructors()[0];
-        readSupport = (CarbonReadSupport) constructor.newInstance();
+        Object object = constructor.newInstance();
+        if(object instanceof CarbonReadSupport) {
+          readSupport = (CarbonReadSupport)object;
+        }
       } catch (ClassNotFoundException ex) {
         LOG.error("Class " + readSupportClass + "not found", ex);
       } catch (Exception ex) {
         LOG.error("Error while creating " + readSupportClass, ex);
       }
+    } else {
+      readSupport = new DictionaryDecodedReadSupportImpl();
     }
     return readSupport;
   }
@@ -613,7 +621,7 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
   private int[] getValidSegments(JobContext job) throws IOException {
     String segmentString = job.getConfiguration().get(INPUT_SEGMENT_NUMBERS, "");
     // if no segments
-    if(segmentString.trim().isEmpty()){
+    if (segmentString.trim().isEmpty()) {
       return new int[0];
     }
 

@@ -20,7 +20,7 @@
 /**
  *
  */
-package org.carbondata.integration.spark.query;
+package org.carbondata.query.carbon.model;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -30,10 +30,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.carbondata.core.constants.CarbonCommonConstants;
-import org.carbondata.integration.spark.query.metadata.CarbonQueryExpression;
-import org.carbondata.query.carbon.model.DimensionAggregatorInfo;
-import org.carbondata.query.carbon.model.QueryDimension;
-import org.carbondata.query.carbon.model.QueryMeasure;
 import org.carbondata.query.expression.Expression;
 
 /**
@@ -77,12 +73,6 @@ public class CarbonQueryPlan implements Serializable {
    */
   private List<QueryMeasure> measures =
       new ArrayList<QueryMeasure>(CarbonCommonConstants.CONSTANT_SIZE_TEN);
-
-  /**
-   * List of expressions. Sum(m1+10), Sum(m1)
-   */
-  private List<CarbonQueryExpression> expressions =
-      new ArrayList<CarbonQueryExpression>(CarbonCommonConstants.CONSTANT_SIZE_TEN);
 
   /**
    * Limit
@@ -260,14 +250,6 @@ public class CarbonQueryPlan implements Serializable {
 
   public Map<String, DimensionAggregatorInfo> getDimAggregatorInfos() {
     return dimAggregatorInfos;
-  }
-
-  public void addExpression(CarbonQueryExpression expression) {
-    expressions.add(expression);
-  }
-
-  public List<CarbonQueryExpression> getExpressions() {
-    return expressions;
   }
 
   public List<QueryDimension> getSortedDimemsions() {

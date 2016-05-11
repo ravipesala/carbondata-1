@@ -42,7 +42,7 @@ import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.constants.CarbonCommonConstants;
 import org.carbondata.integration.spark.partition.api.DataPartitioner;
 import org.carbondata.integration.spark.partition.api.Partition;
-import org.carbondata.integration.spark.query.CarbonQueryPlan;
+import org.carbondata.query.carbon.model.CarbonQueryPlan;
 
 import org.apache.spark.sql.cubemodel.Partitioner;
 

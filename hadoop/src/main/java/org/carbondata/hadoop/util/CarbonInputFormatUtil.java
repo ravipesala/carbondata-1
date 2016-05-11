@@ -19,19 +19,15 @@
 
 package org.carbondata.hadoop.util;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import org.carbondata.core.carbon.AbsoluteTableIdentifier;
 import org.carbondata.core.carbon.metadata.schema.table.CarbonTable;
-import org.carbondata.core.carbon.metadata.schema.table.column.CarbonColumn;
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension;
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonMeasure;
-import org.carbondata.hadoop.exception.CarbonInputFormatException;
-import org.carbondata.query.carbon.model.DimensionAggregatorInfo;
+import org.carbondata.query.carbon.model.CarbonQueryPlan;
 import org.carbondata.query.carbon.model.QueryDimension;
 import org.carbondata.query.carbon.model.QueryMeasure;
-import org.carbondata.query.carbon.model.QueryModel;
 import org.carbondata.query.directinterface.impl.CarbonQueryParseUtil;
 import org.carbondata.query.expression.ColumnExpression;
 import org.carbondata.query.expression.Expression;
@@ -44,84 +40,64 @@ import org.carbondata.query.filters.FilterExpressionProcessor;
  */
 public class CarbonInputFormatUtil {
 
-  public static QueryModel createQueryModel(AbsoluteTableIdentifier absoluteTableIdentifier,
-      CarbonTable carbonTable, String columnString) throws CarbonInputFormatException {
-    QueryModel executorModel = new QueryModel();
+  public static CarbonQueryPlan createQueryPlan(CarbonTable carbonTable, String columnString) {
     String[] columns = null;
     if (columnString != null) {
       columns = columnString.split(",");
     }
     String factTableName = carbonTable.getFactTableName();
-    executorModel.setAbsoluteTableIdentifier(absoluteTableIdentifier);
-    fillExecutorModel(carbonTable, executorModel, factTableName, columns);
-    executorModel.setDimAggregationInfo(new ArrayList<DimensionAggregatorInfo>());
-    executorModel.setForcedDetailRawQuery(true);
-    executorModel.setQueryId(System.nanoTime() + "");
-    return executorModel;
-  }
-
-  private static void fillExecutorModel(CarbonTable carbonTable, QueryModel queryModel,
-      String factTableName, String[] columns) throws CarbonInputFormatException {
+    CarbonQueryPlan plan = new CarbonQueryPlan(carbonTable.getDatabaseName(), factTableName);
     // fill dimensions
-    List<QueryDimension> carbonDimensions = new ArrayList<QueryDimension>();
-    List<QueryMeasure> carbonMsrs = new ArrayList<QueryMeasure>();
-    int i = 0;
     // If columns are null, set all dimensions and measures
+    int i = 0;
     List<CarbonMeasure> tableMsrs = carbonTable.getMeasureByTableName(factTableName);
     List<CarbonDimension> tableDims = carbonTable.getDimensionByTableName(factTableName);
     if (columns == null) {
       for (CarbonDimension dimension : tableDims) {
-        addQueryDimension(carbonDimensions, i, dimension);
+        addQueryDimension(plan, i, dimension);
         i++;
       }
       for (CarbonMeasure measure : tableMsrs) {
-        addQueryMeasure(carbonMsrs, i, measure);
+        addQueryMeasure(plan, i, measure);
         i++;
       }
     } else {
       for (String column : columns) {
         CarbonDimension dimensionByName = carbonTable.getDimensionByName(factTableName, column);
         if (dimensionByName != null) {
-          addQueryDimension(carbonDimensions, i, dimensionByName);
+          addQueryDimension(plan, i, dimensionByName);
           i++;
         } else {
           CarbonMeasure measure = carbonTable.getMeasureByName(factTableName, column);
           if (measure == null) {
-            throw new CarbonInputFormatException(
+            throw new RuntimeException(
                 column + " column not found in the table " + factTableName);
           }
-          addQueryMeasure(carbonMsrs, i, measure);
+          addQueryMeasure(plan, i, measure);
           i++;
         }
       }
     }
 
-    queryModel.setQueryDimension(carbonDimensions);
-    queryModel.setQueryMeasures(carbonMsrs);
-    queryModel.setSortOrder(new byte[0]);
-    queryModel.setSortDimension(new ArrayList<QueryDimension>(0));
-    queryModel.setLimit(-1);
-    queryModel.setTable(carbonTable);
-
-    // fill measures
-    List<CarbonMeasure> carbonMeasures = tableMsrs;
-
+    plan.setLimit(-1);
+    plan.setRawDetailQuery(true);
+    plan.setQueryId(System.nanoTime() + "");
+    return plan;
   }
 
-  private static void addQueryMeasure(List<QueryMeasure> carbonMsrs, int order,
-      CarbonMeasure measure) {
+  private static void addQueryMeasure(CarbonQueryPlan plan, int order, CarbonMeasure measure) {
     QueryMeasure queryMeasure = new QueryMeasure(measure.getColName());
     queryMeasure.setQueryOrder(order);
     queryMeasure.setMeasure(measure);
-    carbonMsrs.add(queryMeasure);
+    plan.addMeasure(queryMeasure);
   }
 
-  private static void addQueryDimension(List<QueryDimension> carbonDimensions, int order,
+  private static void addQueryDimension(CarbonQueryPlan plan, int order,
       CarbonDimension dimension) {
     QueryDimension queryDimension = new QueryDimension(dimension.getColName());
     queryDimension.setQueryOrder(order);
     queryDimension.setDimension(dimension);
-    carbonDimensions.add(queryDimension);
+    plan.addDimension(queryDimension);
   }
 
   public static void processFilterExpression(Expression filterExpression, CarbonTable carbonTable) {
@@ -182,37 +158,20 @@ public class CarbonInputFormatUtil {
   }
 
   /**
-   * It gets the projection columns
-   */
-  public static CarbonColumn[] getProjectionColumns(QueryModel queryModel) {
-    CarbonColumn[] carbonColumns =
-        new CarbonColumn[queryModel.getQueryDimension().size() + queryModel.getQueryMeasures()
-            .size()];
-    for (QueryDimension dimension : queryModel.getQueryDimension()) {
-      carbonColumns[dimension.getQueryOrder()] = dimension.getDimension();
-    }
-    for (QueryMeasure msr : queryModel.getQueryMeasures()) {
-      carbonColumns[msr.getQueryOrder()] = msr.getMeasure();
-    }
-    return carbonColumns;
-  }
-
-  /**
    * Resolve the filter expression.
    *
    * @param filterExpression
    * @param absoluteTableIdentifier
    * @return
-   * @throws CarbonInputFormatException
    */
   public static FilterResolverIntf resolveFilter(Expression filterExpression,
-      AbsoluteTableIdentifier absoluteTableIdentifier) throws CarbonInputFormatException {
+      AbsoluteTableIdentifier absoluteTableIdentifier) {
     try {
       FilterExpressionProcessor filterExpressionProcessor = new FilterExpressionProcessor();
       //get resolved filter
       return filterExpressionProcessor.getFilterResolver(filterExpression, absoluteTableIdentifier);
     } catch (Exception e) {
-      throw new CarbonInputFormatException("Error while resolving filter expression", e);
+      throw new RuntimeException("Error while resolving filter expression", e);
     }
   }
 

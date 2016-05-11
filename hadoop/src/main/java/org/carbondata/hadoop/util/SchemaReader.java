@@ -15,7 +15,7 @@ import org.carbondata.core.reader.ThriftReader;
 import org.apache.thrift.TBase;
 
 /**
- * Created by root1 on 30/4/16.
+ * TODO: It should be removed after store manager implemetation.
  */
 public class SchemaReader {
 

@@ -38,13 +38,10 @@ import org.carbondata.core.util.CarbonProperties
 import org.carbondata.hadoop.CarbonInputFormat
 import org.carbondata.integration.spark.{KeyVal, KeyValImpl}
 import org.carbondata.integration.spark.agg._
-import org.carbondata.integration.spark.query.CarbonQueryPlan
 import org.carbondata.integration.spark.rdd.CarbonQueryRDD
-import org.carbondata.integration.spark.util.{CarbonQueryUtil, CarbonScalaUtil, QueryPlanUtil}
+import org.carbondata.integration.spark.util.{CarbonScalaUtil, QueryPlanUtil}
 import org.carbondata.query.aggregator.impl.CountAggregator
-import org.carbondata.query.carbon.model.QueryDimension
-import org.carbondata.query.carbon.model.QueryMeasure
-import org.carbondata.query.carbon.model.SortOrderType
+import org.carbondata.query.carbon.model._
 import org.carbondata.query.carbon.result.RowResult
 import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression}
 import org.carbondata.query.expression.{Expression => CarbonExpression}
@@ -154,7 +151,6 @@ abstract class AbstractCubeScan(var attributes: Seq[Attribute],
       plan.getDimensions().clear();
       plan.getMeasures().clear();
       plan.getDimAggregatorInfos().clear();
-      plan.getExpressions().clear()
 
       // Fill the selected dimensions & measures obtained from
       // attributes to query plan  for detailed query
@@ -508,7 +504,7 @@ case class CarbonCubeScan(attributesLocal: Seq[Attribute],
     val absoluteTableIdentifier = new AbsoluteTableIdentifier(carbonCatalog.storePath,
       new CarbonTableIdentifier(carbonTable.getDatabaseName, carbonTable.getFactTableName))
 
-    val model = CarbonQueryUtil.createQueryModel(
+    val model = QueryModel.createModel(
       absoluteTableIdentifier, buildCarbonPlan, carbonTable)
     val kv: KeyVal[CarbonKey, CarbonValue] = new KeyValImpl()
     // setting queryid

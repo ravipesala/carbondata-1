@@ -12,15 +12,16 @@ import org.carbondata.core.util.CarbonUtilException;
 import org.carbondata.hadoop.readsupport.CarbonReadSupport;
 
 /**
- * Created by root1 on 1/5/16.
+ * Its an abstract class provides necessary information to decode dictionary data
  */
-public class DictionaryDecodeReadSupport implements CarbonReadSupport<Object[]> {
+public abstract class AbstractDictionaryDecodedReadSupport<T> implements CarbonReadSupport<T> {
 
-  private Dictionary[] dictionaries;
+  protected Dictionary[] dictionaries;
 
   /**
    * It would be instantiated in side the task so the dictionary would be loaded inside every mapper
    * instead of driver.
+   *
    * @param carbonColumns
    * @param absoluteTableIdentifier
    */
@@ -36,20 +37,9 @@ public class DictionaryDecodeReadSupport implements CarbonReadSupport<Object[]> 
           dictionaries[i] = forwardDictionaryCache.get(new DictionaryColumnUniqueIdentifier(
               absoluteTableIdentifier.getCarbonTableIdentifier(), carbonColumns[i].getColumnId()));
         } catch (CarbonUtilException e) {
-          //TODO : create exception class and throw
           throw new RuntimeException(e);
         }
       }
-
     }
-  }
-
-  @Override public Object[] readRow(Object[] data) {
-    for (int i = 0; i < dictionaries.length; i++) {
-      if (dictionaries[i] != null) {
-        data[i] = dictionaries[i].getDictionaryValueForKey((int) data[i]);
-      }
-    }
-    return data;
   }
 }

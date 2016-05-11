@@ -17,15 +17,6 @@
  * under the License.
  */
 
-/**
- * Copyright Notice
- * =====================================
- * This file contains proprietary information of
- * Huawei Technologies India Pvt Ltd.
- * Copying or reproduction without prior written approval is prohibited.
- * Copyright (c) 1997
- * =====================================
- */
 package org.carbondata.integration.spark.partition.api.impl;
 
 import java.util.ArrayList;
@@ -39,8 +30,8 @@ import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.constants.CarbonCommonConstants;
 import org.carbondata.integration.spark.partition.api.DataPartitioner;
 import org.carbondata.integration.spark.partition.api.Partition;
-import org.carbondata.integration.spark.query.CarbonQueryPlan;
 import org.carbondata.integration.spark.query.metadata.CarbonDimensionFilter;
+import org.carbondata.query.carbon.model.CarbonQueryPlan;
 import org.carbondata.query.queryinterface.query.metadata.CarbonDimensionLevelFilter;
 
 import org.apache.spark.sql.cubemodel.Partitioner;
