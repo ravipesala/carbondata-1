@@ -78,15 +78,13 @@ class CarbonQueryRDD[K, V](
 
     val result = new util.ArrayList[Partition](defaultParallelism)
     val validSegments = job.getConfiguration.get(CarbonInputFormat.INPUT_SEGMENT_NUMBERS)
-    if (!validSegments.isEmpty) {
-      var filterResolver: FilterResolverIntf = null
-      if (filterExpression != null) {
-        // set filter resolver tree
-        filterResolver = carbonInputFormat.getResolvedFilter(job.getConfiguration, filterExpression)
-        queryModel.setFilterExpressionResolverTree(filterResolver)
-      }
+    if(!validSegments.isEmpty) {
+      // set filter resolver tree
+      var filterResolver = carbonInputFormat.getResolvedFilter(job.getConfiguration, filterExpression)
+      CarbonInputFormat.setFilterPredicates(job.getConfiguration, filterResolver)
+      queryModel.setFilterExpressionResolverTree(filterResolver)
       // get splits
-      val splits = carbonInputFormat.getSplits(job, filterResolver)
+      val splits = carbonInputFormat.getSplits(job)
       val carbonInputSplits = splits.asScala.map(_.asInstanceOf[CarbonInputSplit])
 
       val blockList = carbonInputSplits.map(inputSplit =>
