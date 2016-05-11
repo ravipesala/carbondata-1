@@ -41,13 +41,14 @@ import org.carbondata.core.carbon.datastore.impl.btree.BlockBTreeLeafNode;
 import org.carbondata.core.carbon.metadata.schema.table.CarbonTable;
 import org.carbondata.core.carbon.path.CarbonStorePath;
 import org.carbondata.core.carbon.path.CarbonTablePath;
-import org.carbondata.hadoop.exception.CarbonInputFormatException;
 import org.carbondata.core.keygenerator.KeyGenException;
+import org.carbondata.hadoop.exception.CarbonInputFormatException;
 import org.carbondata.hadoop.readsupport.CarbonReadSupport;
 import org.carbondata.hadoop.readsupport.impl.DictionaryDecodeReadSupport;
 import org.carbondata.hadoop.util.CarbonInputFormatUtil;
 import org.carbondata.hadoop.util.ObjectSerializationUtil;
 import org.carbondata.hadoop.util.SchemaReader;
+import org.carbondata.lcm.status.SegmentStatusManager;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
 import org.carbondata.query.carbon.model.QueryModel;
 import org.carbondata.query.expression.Expression;
@@ -68,7 +69,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.mapreduce.InputSplit;
-import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
@@ -106,7 +106,7 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
   /**
    * Set List of segments to access
    */
-  public void setSegmentsToAccess(Configuration configuration, List<String> segmentNosList) {
+  private void setSegmentsToAccess(Configuration configuration, List<String> segmentNosList) {
 
     //serialize to comma separated string
     StringBuilder stringSegmentsBuilder = new StringBuilder();
@@ -285,7 +285,9 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
   public FilterResolverIntf getResolvedFilter(Configuration configuration,
       Expression filterExpression)
       throws IOException, IndexBuilderException, QueryExecutionException {
-
+    if(filterExpression == null) {
+      return null;
+    }
     FilterExpressionProcessor filterExpressionProcessor = new FilterExpressionProcessor();
     AbsoluteTableIdentifier absoluteTableIdentifier = getAbsoluteTableIdentifier(configuration);
     //get resolved filter
@@ -323,6 +325,9 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
   public static void setFilterPredicates(Configuration configuration,
       FilterResolverIntf filterExpression) throws CarbonInputFormatException {
     try {
+      if(filterExpression == null) {
+        return;
+      }
       String filterString = ObjectSerializationUtil.convertObjectToString(filterExpression);
       configuration.set(FILTER_PREDICATE, filterString);
     } catch (Exception e) {

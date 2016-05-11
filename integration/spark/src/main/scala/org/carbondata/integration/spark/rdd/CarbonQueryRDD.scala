@@ -18,9 +18,7 @@
 
 package org.carbondata.integration.spark.rdd
 
-import java.text.SimpleDateFormat
 import java.util
-import java.util.Date
 
 import scala.collection.JavaConverters._
 
@@ -33,16 +31,12 @@ import org.carbondata.common.logging.LogServiceFactory
 import org.carbondata.core.carbon.datastore.block.TableBlockInfo
 import org.carbondata.core.iterator.CarbonIterator
 import org.carbondata.hadoop.{CarbonInputFormat, CarbonInputSplit}
-import org.carbondata.hadoop.util.CarbonInputFormatUtil
 import org.carbondata.integration.spark.KeyVal
 import org.carbondata.integration.spark.util.QueryPlanUtil
 import org.carbondata.query.carbon.executor.QueryExecutorFactory
 import org.carbondata.query.carbon.model.QueryModel
 import org.carbondata.query.carbon.result.RowResult
 import org.carbondata.query.expression.Expression
-import org.carbondata.query.filter.resolver.FilterResolverIntf
-
-
 
 class CarbonSparkPartition(rddId: Int, val idx: Int,
   @transient val carbonInputSplit: CarbonInputSplit)
@@ -53,7 +47,6 @@ class CarbonSparkPartition(rddId: Int, val idx: Int,
 
   override def hashCode(): Int = 41 * (41 + rddId) + idx
 }
-
 
  /**
   * This RDD is used to perform query.
@@ -74,14 +67,12 @@ class CarbonSparkPartition(rddId: Int, val idx: Int,
     val (carbonInputFormat: CarbonInputFormat[RowResult], job: Job) =
       QueryPlanUtil.createCarbonInputFormat(queryModel.getAbsoluteTableIdentifier)
 
-    var filterResolver: FilterResolverIntf = null
-    if (filterExpression != null) {
-        // set filter resolver tree
-        filterResolver = carbonInputFormat.getResolvedFilter(job.getConfiguration, filterExpression)
-        queryModel.setFilterExpressionResolverTree(filterResolver)
-      }
+    // set filter resolver tree
+    var filterResolver = carbonInputFormat.getResolvedFilter(job.getConfiguration, filterExpression)
+    CarbonInputFormat.setFilterPredicates(job.getConfiguration, filterResolver)
+    queryModel.setFilterExpressionResolverTree(filterResolver)
     // get splits
-    val splits = carbonInputFormat.getSplits(job, filterResolver);
+    val splits = carbonInputFormat.getSplits(job);
     val carbonInputSplits = splits.asScala.map(_.asInstanceOf[CarbonInputSplit])
 
     val result = new Array[Partition](splits.size)
@@ -164,7 +155,6 @@ class CarbonSparkPartition(rddId: Int, val idx: Int,
     }
     iter
   }
-
 
    /**
     * Get the preferred locations where to launch this task.
