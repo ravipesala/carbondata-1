@@ -52,8 +52,6 @@ class CarbonContext(val sc: SparkContext, val storePath: String) extends HiveCon
   override protected[sql] lazy val optimizer: Optimizer =
     new CarbonOptimizer(DefaultOptimizer, conf)
 
-  override def executePlan(plan: LogicalPlan): this.QueryExecution = new this.QueryExecution(plan)
-
   override protected[sql] def dialectClassName = classOf[CarbonSQLDialect].getCanonicalName
 
   experimental.extraStrategies = CarbonStrategy.getStrategy(self)

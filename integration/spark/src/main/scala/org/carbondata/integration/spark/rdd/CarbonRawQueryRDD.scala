@@ -48,14 +48,14 @@ import org.carbondata.query.expression.Expression
  * @tparam V
  */
 class CarbonRawQueryRDD[K, V](
-  sc: SparkContext,
-  queryModel: QueryModel,
-  filterExpression: Expression,
-  keyClass: RawKeyVal[K, V],
-  @transient conf: Configuration,
-  cubeCreationTime: Long,
-  schemaLastUpdatedTime: Long,
-  baseStoreLocation: String)
+    sc: SparkContext,
+    queryModel: QueryModel,
+    filterExpression: Expression,
+    keyClass: RawKeyVal[K, V],
+    @transient conf: Configuration,
+    cubeCreationTime: Long,
+    schemaLastUpdatedTime: Long,
+    baseStoreLocation: String)
   extends CarbonQueryRDD[K, V](sc,
     queryModel,
     filterExpression,
@@ -90,14 +90,12 @@ class CarbonRawQueryRDD[K, V](
         val carbonPropertiesFilePath = System.getProperty("carbon.properties.filepath", null)
         logInfo("*************************" + carbonPropertiesFilePath)
         if (null == carbonPropertiesFilePath) {
-          System.setProperty("carbon.properties.filepath", System.getProperty("user.dir")
-            + '/' + "conf" + '/' +
-            "carbon.properties"
-          );
+          System.setProperty("carbon.properties.filepath",
+            System.getProperty("user.dir") + '/' + "conf" + '/' + "carbon.properties");
         }
         // execute query
         rowIterator = QueryExecutorFactory.getQueryExecutor(queryModel).execute(queryModel)
-                      .asInstanceOf[CarbonIterator[BatchRawResult]]
+          .asInstanceOf[CarbonIterator[BatchRawResult]]
       }
         // TODO: CarbonQueryUtil.isQuickFilter quick filter from dictionary needs to support
       } catch {
@@ -132,7 +130,7 @@ class CarbonRawQueryRDD[K, V](
       }
 
       logInfo("*************************** Total Time Taken to execute the query in Carbon Side: " +
-        (System.currentTimeMillis - queryStartTime)
+              (System.currentTimeMillis - queryStartTime)
       )
     }
     iter
