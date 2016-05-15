@@ -85,8 +85,7 @@ public class CompressedDimensionChunkFileBasedReader extends AbstractChunkReader
         .readByteArray(filePath, dimensionColumnChunk.get(blockIndex).getDataPageOffset(),
             dimensionColumnChunk.get(blockIndex).getDataPageLength()));
     // if row id block is present then read the row id chunk and uncompress it
-    if (CarbonUtil.hasEncoding(dimensionColumnChunk.get(blockIndex).getEncodingList(),
-        Encoding.INVERTED_INDEX)) {
+    if (dimensionColumnChunk.get(blockIndex).hasEncoding(Encoding.INVERTED_INDEX)) {
       invertedIndexes = CarbonUtil
           .getUnCompressColumnIndex(dimensionColumnChunk.get(blockIndex).getRowIdPageLength(),
               fileReader.readByteArray(filePath,
@@ -97,21 +96,21 @@ public class CompressedDimensionChunkFileBasedReader extends AbstractChunkReader
     }
     // if rle is applied then read the rle block chunk and then uncompress
     //then actual data based on rle block
-    if (CarbonUtil
-        .hasEncoding(dimensionColumnChunk.get(blockIndex).getEncodingList(), Encoding.RLE)) {
+    if (dimensionColumnChunk.get(blockIndex).hasEncoding(Encoding.RLE)) {
       // read and uncompress the rle block
       rlePage = numberComressor.unCompress(fileReader
           .readByteArray(filePath, dimensionColumnChunk.get(blockIndex).getRlePageOffset(),
               dimensionColumnChunk.get(blockIndex).getRlePageLength()));
       // uncompress the data with rle indexes
-      dataPage = UnBlockIndexer.uncompressData(dataPage, rlePage, eachColumnValueSize[blockIndex]);
-      rlePage = null;
+      // dataPage = UnBlockIndexer.uncompressData(dataPage, rlePage, eachColumnValueSize[blockIndex]);
+      // rlePage = null;
     }
     // fill chunk attributes
     DimensionChunkAttributes chunkAttributes = new DimensionChunkAttributes();
     chunkAttributes.setEachRowSize(eachColumnValueSize[blockIndex]);
     chunkAttributes.setInvertedIndexes(invertedIndexes);
     chunkAttributes.setInvertedIndexesReverse(invertedIndexesReverse);
+    chunkAttributes.setRle(rlePage);
     DimensionColumnDataChunk columnDataChunk = null;
 
     if (dimensionColumnChunk.get(blockIndex).isRowChunk()) {
@@ -120,8 +119,7 @@ public class CompressedDimensionChunkFileBasedReader extends AbstractChunkReader
     }
     // if no dictionary column then first create a no dictionary column chunk
     // and set to data chunk instance
-    if (!CarbonUtil
-        .hasEncoding(dimensionColumnChunk.get(blockIndex).getEncodingList(), Encoding.DICTIONARY)) {
+    if (!dimensionColumnChunk.get(blockIndex).hasEncoding(Encoding.DICTIONARY)) {
       columnDataChunk =
           new VariableLengthDimensionDataChunk(getNoDictionaryDataChunk(dataPage), chunkAttributes);
       chunkAttributes.setNoDictionary(true);

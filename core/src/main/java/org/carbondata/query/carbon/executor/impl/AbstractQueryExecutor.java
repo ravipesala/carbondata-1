@@ -39,7 +39,6 @@ import org.carbondata.core.constants.CarbonCommonConstants;
 import org.carbondata.core.datastorage.store.impl.FileFactory;
 import org.carbondata.core.keygenerator.KeyGenException;
 import org.carbondata.core.keygenerator.KeyGenerator;
-import org.carbondata.core.util.CarbonUtil;
 import org.carbondata.query.aggregator.util.MeasureAggregatorFactory;
 import org.carbondata.query.carbon.executor.QueryExecutor;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
@@ -376,8 +375,7 @@ public abstract class AbstractQueryExecutor implements QueryExecutor {
       if (queryDimension.get(counter).getDimension().numberOfChild() > 0) {
         counter += queryDimension.get(counter).getDimension().numberOfChild();
         continue;
-      } else if (!CarbonUtil.hasEncoding(queryDimension.get(counter).getDimension().getEncoder(),
-          Encoding.DICTIONARY)) {
+      } else if (!queryDimension.get(counter).getDimension().hasEncoding(Encoding.DICTIONARY)) {
         counter++;
       } else {
         fixedLengthDimensionOrdinal.add(queryDimension.get(counter).getDimension().getKeyOrdinal());

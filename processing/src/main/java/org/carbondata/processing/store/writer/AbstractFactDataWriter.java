@@ -353,8 +353,8 @@ public abstract class AbstractFactDataWriter<T> implements CarbonFactDataWriter<
     for (int i = 0; i < wrapperColumnSchemaList.size(); i++) {
       columnSchemaList
           .add(schemaConverter.fromWrapperToExternalColumnSchema(wrapperColumnSchemaList.get(i)));
-      if (CarbonUtil.hasEncoding(wrapperColumnSchemaList.get(i).getEncodingList(),
-          org.carbondata.core.carbon.metadata.encoder.Encoding.DICTIONARY)) {
+      if (wrapperColumnSchemaList.get(i)
+          .hasEncoding(org.carbondata.core.carbon.metadata.encoder.Encoding.DICTIONARY)) {
         cardinality.add(dictionaryColumnCardinality[counter]);
         counter++;
       } else if (!wrapperColumnSchemaList.get(i).isDimensionColumn()) {

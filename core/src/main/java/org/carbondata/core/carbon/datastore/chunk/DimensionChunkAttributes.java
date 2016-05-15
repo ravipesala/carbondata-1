@@ -35,6 +35,11 @@ public class DimensionChunkAttributes {
   private int[] invertedIndexesReverse;
 
   /**
+   * Run length encoding
+   */
+  private int[] rle;
+
+  /**
    * each row size
    */
   private int columnValueSize;
@@ -98,5 +103,13 @@ public class DimensionChunkAttributes {
    */
   public void setNoDictionary(boolean isNoDictionary) {
     this.isNoDictionary = isNoDictionary;
+  }
+
+  public int[] getRle() {
+    return rle;
+  }
+
+  public void setRle(int[] rle) {
+    this.rle = rle;
   }
 }

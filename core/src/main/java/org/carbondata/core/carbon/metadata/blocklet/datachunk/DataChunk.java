@@ -19,6 +19,7 @@
 package org.carbondata.core.carbon.metadata.blocklet.datachunk;
 
 import java.io.Serializable;
+import java.util.BitSet;
 import java.util.List;
 
 import org.carbondata.core.carbon.metadata.blocklet.compressor.ChunkCompressorMeta;
@@ -113,6 +114,8 @@ public class DataChunk implements Serializable {
    * about max, min, decimal length, type
    */
   private List<ValueEncoderMeta> valueEncoderMetaList;
+
+  private BitSet encodingSet = new BitSet();
 
   /**
    * @return the chunkCompressionMeta
@@ -308,6 +311,14 @@ public class DataChunk implements Serializable {
    */
   public void setEncoderList(List<Encoding> encodingList) {
     this.encodingList = encodingList;
+    encodingSet.clear();
+    for (Encoding encoding : encodingList) {
+      encodingSet.set(encoding.getEncodingIndex());
+    }
+  }
+
+  public boolean hasEncoding(Encoding encoding) {
+    return encodingSet.get(encoding.getEncodingIndex());
   }
 
   /**

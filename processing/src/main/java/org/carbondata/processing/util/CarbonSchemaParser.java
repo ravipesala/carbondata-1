@@ -356,7 +356,7 @@ public final class CarbonSchemaParser {
   public static int getDimensionString(List<CarbonDimension> dimensions, StringBuilder dimString,
       int counter, CarbonDataLoadSchema carbonDataLoadSchema) {
     for (CarbonDimension cDimension : dimensions) {
-      if (!cDimension.getEncoder().contains(Encoding.DICTIONARY)) {
+      if (!cDimension.hasEncoding(Encoding.DICTIONARY)) {
         continue;
       }
 
@@ -512,7 +512,7 @@ public final class CarbonSchemaParser {
     String hierStr = "";
 
     for (CarbonDimension cDimension : dimensions) {
-      if (cDimension.getEncoder().contains(Encoding.DICTIONARY)) {
+      if (cDimension.hasEncoding(Encoding.DICTIONARY)) {
         continue;
       }
       String tableName = extractDimensionTableName(cDimension.getColName(), carbonDataLoadSchema);
@@ -542,7 +542,7 @@ public final class CarbonSchemaParser {
     List<String> list = new ArrayList<String>(CarbonCommonConstants.CONSTANT_SIZE_TEN);
     for (CarbonDimension cDimension : dimensions) {
       // Ignoring the dimensions which are high cardinality dimension
-      if (!cDimension.getEncoder().contains(Encoding.DICTIONARY)) {
+      if (!cDimension.hasEncoding(Encoding.DICTIONARY)) {
         continue;
       }
       list.add(extractDimensionTableName(cDimension.getColName(), carbonDataLoadSchema) + "_"
@@ -773,7 +773,7 @@ public final class CarbonSchemaParser {
     String hierStr = "";
 
     for (CarbonDimension cDimension : dimensions) {
-      if (cDimension.getEncoder().contains(Encoding.DICTIONARY)) {
+      if (cDimension.hasEncoding(Encoding.DICTIONARY)) {
         continue;
       }
       String tableName = extractDimensionTableName(cDimension.getColName(), carbonDataLoadSchema);
@@ -1035,7 +1035,7 @@ public final class CarbonSchemaParser {
   public static String getActualDimensions(List<CarbonDimension> dimensions) {
     StringBuilder actualDim = new StringBuilder();
     for (CarbonDimension cDimension : dimensions) {
-      if (!cDimension.getEncoder().contains(Encoding.DICTIONARY)) {
+      if (!cDimension.hasEncoding(Encoding.DICTIONARY)) {
         continue;
       }
       actualDim.append(cDimension.getColName());
@@ -1177,7 +1177,7 @@ public final class CarbonSchemaParser {
     StringBuffer buff = new StringBuffer();
     int counter = 0;
     for (CarbonDimension cDimension : dimensions) {
-      if (cDimension.getEncoder().contains(Encoding.DIRECT_DICTIONARY)) {
+      if (cDimension.hasEncoding(Encoding.DIRECT_DICTIONARY)) {
         buff.append(cDimension.getOrdinal());
         buff.append(CarbonCommonConstants.COLON_SPC_CHARACTER);
         buff.append(cDimension.getDataType());
@@ -1199,7 +1199,7 @@ public final class CarbonSchemaParser {
   public static int getNoDictionaryDimensionString(List<CarbonDimension> dimensions,
       StringBuilder dimString, int counter, CarbonDataLoadSchema carbonDataLoadSchema) {
     for (CarbonDimension cDimension : dimensions) {
-      if (cDimension.getEncoder().contains(Encoding.DICTIONARY)) {
+      if (cDimension.hasEncoding(Encoding.DICTIONARY)) {
         continue;
       }
 

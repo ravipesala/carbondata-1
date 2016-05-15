@@ -20,6 +20,7 @@ package org.carbondata.core.carbon.datastore.chunk.impl;
 
 import org.carbondata.core.carbon.datastore.chunk.DimensionChunkAttributes;
 import org.carbondata.core.carbon.datastore.chunk.DimensionColumnDataChunk;
+import org.carbondata.core.datastorage.store.columnar.UnBlockIndexer;
 import org.carbondata.query.carbon.executor.infos.KeyStructureInfo;
 
 /**
@@ -54,7 +55,7 @@ public class FixedLengthDimensionDataChunk implements DimensionColumnDataChunk<b
    *
    * @param data             data to filed
    * @param offset           offset from which data need to be filed
-   * @param rowId            row id of the chunk
+   * @param index            row id of the chunk
    * @param keyStructureInfo define the structure of the key
    * @return how many bytes was copied
    */
@@ -63,15 +64,24 @@ public class FixedLengthDimensionDataChunk implements DimensionColumnDataChunk<b
     if (chunkAttributes.getInvertedIndexes() != null) {
       index = chunkAttributes.getInvertedIndexesReverse()[index];
     }
+    unCompressRle();
     System.arraycopy(dataChunk, index * chunkAttributes.getColumnValueSize(), data, offset,
         chunkAttributes.getColumnValueSize());
     return chunkAttributes.getColumnValueSize();
   }
 
+  private void unCompressRle() {
+    if (chunkAttributes.getRle() != null) {
+      dataChunk = UnBlockIndexer.uncompressData(dataChunk, chunkAttributes.getRle(),
+          chunkAttributes.getColumnValueSize());
+      chunkAttributes.setRle(null);
+    }
+  }
+
   /**
    * Below method to get the data based in row id
    *
-   * @param row id row id of the data
+   * @param index id row id of the data
    * @return chunk
    */
   @Override public byte[] getChunkData(int index) {
@@ -79,6 +89,7 @@ public class FixedLengthDimensionDataChunk implements DimensionColumnDataChunk<b
     if (chunkAttributes.getInvertedIndexes() != null) {
       index = chunkAttributes.getInvertedIndexesReverse()[index];
     }
+    unCompressRle();
     System.arraycopy(dataChunk, index * chunkAttributes.getColumnValueSize(), data, 0,
         chunkAttributes.getColumnValueSize());
     return data;

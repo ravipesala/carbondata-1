@@ -22,10 +22,20 @@ package org.carbondata.core.carbon.metadata.encoder;
  * Encoding type supported in carbon
  */
 public enum Encoding {
-  DICTIONARY,
-  DELTA,
-  RLE,
-  INVERTED_INDEX,
-  BIT_PACKED,
-  DIRECT_DICTIONARY;
+  DICTIONARY(1),
+  DELTA(2),
+  RLE(3),
+  INVERTED_INDEX(4),
+  BIT_PACKED(5),
+  DIRECT_DICTIONARY(6);
+
+  private int encodingIndex;
+
+  Encoding(int encodingIndex) {
+    this.encodingIndex = encodingIndex;
+  }
+
+  public int getEncodingIndex() {
+    return encodingIndex;
+  }
 }

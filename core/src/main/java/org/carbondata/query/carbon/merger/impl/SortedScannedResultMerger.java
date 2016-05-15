@@ -30,7 +30,6 @@ import org.carbondata.core.carbon.metadata.encoder.Encoding;
 import org.carbondata.core.constants.CarbonCommonConstants;
 import org.carbondata.core.iterator.CarbonIterator;
 import org.carbondata.core.keygenerator.KeyGenException;
-import org.carbondata.core.util.CarbonUtil;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
 import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
 import org.carbondata.query.carbon.executor.infos.KeyStructureInfo;
@@ -74,8 +73,7 @@ public class SortedScannedResultMerger extends AbstractScannedResultMerger {
     int length = sortInfo.getSortDimension().size();
     int noDictionaryIndex = 0;
     for (int i = 0; i < length; i++) {
-      if (!CarbonUtil.hasEncoding(sortInfo.getSortDimension().get(i).getDimension().getEncoder(),
-          Encoding.DICTIONARY)) {
+      if (!sortInfo.getSortDimension().get(i).getDimension().hasEncoding(Encoding.DICTIONARY)) {
         compratorList.add(new VariableLengthKeyResultComparator(sortInfo.getDimensionSortOrder()[i],
             noDictionaryIndex++, sortInfo.getSortDimension().get(i).getDimension().getDataType()));
       } else {
@@ -131,8 +129,7 @@ public class SortedScannedResultMerger extends AbstractScannedResultMerger {
         keyArray = keyStructureInfo.getKeyGenerator()
             .getKeyArray(key.getDictionaryKey(), keyStructureInfo.getMaskedBytes());
         for (int i = 0; i < sortInfo.getSortDimension().size(); i++) {
-          if (CarbonUtil.hasEncoding(sortInfo.getSortDimension().get(i).getDimension().getEncoder(),
-              Encoding.DICTIONARY)) {
+          if (sortInfo.getSortDimension().get(i).getDimension().hasEncoding(Encoding.DICTIONARY)) {
             keyArray[sortInfo.getSortDimension().get(i).getDimension().getKeyOrdinal()] =
                 blockExecutionInfo.getColumnIdToDcitionaryMapping()
                     .get(sortInfo.getSortDimension().get(i).getDimension().getColumnId())

@@ -27,7 +27,6 @@ import org.carbondata.common.logging.LogService;
 import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.carbon.metadata.encoder.Encoding;
 import org.carbondata.core.constants.CarbonCommonConstants;
-import org.carbondata.core.util.CarbonUtil;
 import org.carbondata.query.aggregator.MeasureAggregator;
 import org.carbondata.query.aggregator.impl.CountAggregator;
 import org.carbondata.query.aggregator.impl.DistinctCountAggregator;
@@ -100,8 +99,7 @@ public class QueryResultPreparator {
           .getKeyArray(key.getDictionaryKey(),
               queryExecuterProperties.keyStructureInfo.getMaskedBytes());
       for (int i = 0; i < dimensionCount; i++) {
-        if (!CarbonUtil
-            .hasEncoding(queryDimension.get(i).getDimension().getEncoder(), Encoding.DICTIONARY)) {
+        if (!queryDimension.get(i).getDimension().hasEncoding(Encoding.DICTIONARY)) {
           resultData[currentRow][i] = DataTypeUtil.getDataBasedOnDataType(
               new String(key.getNoDictionaryKeyByIndex(noDictionaryColumnIndex++)),
               queryDimension.get(i).getDimension().getDataType());
@@ -162,8 +160,7 @@ public class QueryResultPreparator {
       row = new Object[dimensionCount + msrCount];
       for (int i = 0; i < dimensionCount; i++) {
         queryDimension = queryDimensions.get(i);
-        if (!CarbonUtil
-            .hasEncoding(queryDimension.getDimension().getEncoder(), Encoding.DICTIONARY)) {
+        if (!queryDimension.getDimension().hasEncoding(Encoding.DICTIONARY)) {
           row[queryDimension.getQueryOrder()] = convertedResult[i][columnIndex];
         } else {
           if (queryExecuterProperties.sortDimIndexes[i] == 1) {

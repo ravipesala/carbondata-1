@@ -1475,17 +1475,6 @@ public final class CarbonUtil {
   }
 
   /**
-   * Below method will be used to check whether particular encoding is present
-   * in the dimension or not
-   *
-   * @param encoding  encoding to search
-   * @return if encoding is present in dimension
-   */
-  public static boolean hasEncoding(List<Encoding> encodings, Encoding encoding) {
-    return encodings.contains(encoding);
-  }
-
-  /**
    * below method is to check whether data type is present in the data type array
    *
    * @param dataType  data type to be searched
@@ -1615,8 +1604,8 @@ public final class CarbonUtil {
     List<Boolean> isDictionaryDimensions = new ArrayList<Boolean>();
     Set<Integer> processedColumnGroup = new HashSet<Integer>();
     for (CarbonDimension carbonDimension : tableDimensionList) {
-      if (carbonDimension.isColumnar() && hasEncoding(carbonDimension.getEncoder(),
-          Encoding.DICTIONARY)) {
+      if (carbonDimension.isColumnar() &&
+          carbonDimension.hasEncoding(Encoding.DICTIONARY)) {
         isDictionaryDimensions.add(true);
       } else if (!carbonDimension.isColumnar()) {
         if (processedColumnGroup.add(carbonDimension.columnGroupId())) {
@@ -1683,6 +1672,17 @@ public final class CarbonUtil {
       total += byteBufferArr[index].capacity();
     }
     return total;
+  }
+
+  /**
+   * Calculates of size of data till the index
+   */
+  public static int calculateRleIndexSize(int index, int[] rle) {
+    int size = 0;
+    for (int i = 1; i < index * 2; i += 2) {
+      size = rle[i] + size;
+    }
+    return size;
   }
 
 }

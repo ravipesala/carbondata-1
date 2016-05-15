@@ -135,6 +135,7 @@ public class ExcludeFilterExecuterImpl implements FilterExecuter {
     int startIndex = 0;
     BitSet bitSet = new BitSet(numerOfRows);
     bitSet.flip(0, numerOfRows);
+    int[] rle = dimColumnDataChunk.getAttributes().getRle();
     byte[][] filterValues = dimColumnExecuterInfo.getFilterKeys();
     for (int i = 0; i < filterValues.length; i++) {
       startKey = CarbonUtil
@@ -143,21 +144,30 @@ public class ExcludeFilterExecuterImpl implements FilterExecuter {
       if (startKey == -1) {
         continue;
       }
-      bitSet.flip(columnIndex[startKey]);
-      last = startKey;
-      for (int j = startKey + 1; j < numerOfRows; j++) {
-        if (ByteUtil.UnsafeComparer.INSTANCE
-            .compareTo(dimColumnDataChunk.getCompleteDataChunk(), j * filterValues[i].length,
-                filterValues[i].length, filterValues[i], 0, filterValues[i].length) == 0) {
+      if (rle != null) {
+        // take advantage of rle
+        int rleIndexSize = rle[(startKey * 2) + 1];
+        int size = CarbonUtil.calculateRleIndexSize(startKey, rle);
+        for (int j = size; j < size + rleIndexSize; j++) {
           bitSet.flip(columnIndex[j]);
-          last++;
-        } else {
+        }
+      } else {
+        bitSet.flip(columnIndex[startKey]);
+        last = startKey;
+        for (int j = startKey + 1; j < numerOfRows; j++) {
+          if (ByteUtil.UnsafeComparer.INSTANCE
+              .compareTo(dimColumnDataChunk.getCompleteDataChunk(), j * filterValues[i].length,
+                  filterValues[i].length, filterValues[i], 0, filterValues[i].length) == 0) {
+            bitSet.flip(columnIndex[j]);
+            last++;
+          } else {
+            break;
+          }
+        }
+        startIndex = last;
+        if (startIndex >= numerOfRows) {
           break;
         }
-      }
-      startIndex = last;
-      if (startIndex >= numerOfRows) {
-        break;
       }
     }
     return bitSet;
@@ -166,25 +176,33 @@ public class ExcludeFilterExecuterImpl implements FilterExecuter {
   private BitSet setFilterdIndexToBitSet(FixedLengthDimensionDataChunk dimColumnDataChunk,
       int numerOfRows) {
     BitSet bitSet = new BitSet(numerOfRows);
-    if (dimColumnDataChunk instanceof FixedLengthDimensionDataChunk) {
-      FixedLengthDimensionDataChunk fixedChunk = (FixedLengthDimensionDataChunk) dimColumnDataChunk;
-      int startKey = 0;
-      int last = 0;
-      bitSet.flip(0, numerOfRows);
-      int startIndex = 0;
-      byte[][] filterValues = dimColumnExecuterInfo.getFilterKeys();
-      for (int k = 0; k < filterValues.length; k++) {
-        startKey = CarbonUtil
-            .getFirstIndexUsingBinarySearch(dimColumnDataChunk, startIndex, numerOfRows - 1,
-                filterValues[k]);
-        if (startKey == -1) {
-          continue;
+    int startKey = 0;
+    int last = 0;
+    bitSet.flip(0, numerOfRows);
+    int startIndex = 0;
+    int[] rle = dimColumnDataChunk.getAttributes().getRle();
+    byte[][] filterValues = dimColumnExecuterInfo.getFilterKeys();
+    for (int k = 0; k < filterValues.length; k++) {
+      startKey = CarbonUtil
+          .getFirstIndexUsingBinarySearch(dimColumnDataChunk, startIndex, numerOfRows - 1,
+              filterValues[k]);
+      if (startKey == -1) {
+        continue;
+      }
+      if (rle != null) {
+        // take advantage of rle
+        int rleIndexSize = rle[(startKey * 2) + 1];
+        int size = CarbonUtil.calculateRleIndexSize(startKey, rle);
+        for (int j = size; j < size + rleIndexSize; j++) {
+          bitSet.flip(j);
         }
+      } else {
+
         bitSet.flip(startKey);
         last = startKey;
         for (int j = startKey + 1; j < numerOfRows; j++) {
           if (ByteUtil.UnsafeComparer.INSTANCE
-              .compareTo(fixedChunk.getCompleteDataChunk(), j * filterValues[k].length,
+              .compareTo(dimColumnDataChunk.getCompleteDataChunk(), j * filterValues[k].length,
                   filterValues[k].length, filterValues[k], 0, filterValues[k].length) == 0) {
             bitSet.flip(j);
             last++;

@@ -132,9 +132,9 @@ public class CarbonTable implements Serializable {
                   listOfColumns, complexDimension);
           i = dimensionOrdinal - 1;
         } else {
-          if (!columnSchema.getEncodingList().contains(Encoding.DICTIONARY)) {
+          if (!columnSchema.hasEncoding(Encoding.DICTIONARY)) {
             dimensions.add(new CarbonDimension(columnSchema, dimensionOrdinal++, -1, -1));
-          } else if (columnSchema.getEncodingList().contains(Encoding.DICTIONARY)
+          } else if (columnSchema.hasEncoding(Encoding.DICTIONARY)
               && columnSchema.getColumnGroupId() == -1) {
             dimensions.add(new CarbonDimension(columnSchema, dimensionOrdinal++, keyOrdinal++, -1));
           } else {

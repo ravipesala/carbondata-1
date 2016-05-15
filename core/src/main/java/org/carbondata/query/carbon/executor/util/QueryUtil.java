@@ -48,7 +48,6 @@ import org.carbondata.core.carbon.metadata.schema.table.column.CarbonMeasure;
 import org.carbondata.core.constants.CarbonCommonConstants;
 import org.carbondata.core.keygenerator.KeyGenException;
 import org.carbondata.core.keygenerator.KeyGenerator;
-import org.carbondata.core.util.CarbonUtil;
 import org.carbondata.core.util.CarbonUtilException;
 import org.carbondata.query.carbon.aggregator.dimension.DimensionDataAggregator;
 import org.carbondata.query.carbon.aggregator.dimension.impl.ColumnGroupDimensionsAggregator;
@@ -278,19 +277,19 @@ public class QueryUtil {
     // so we need to get only one instance of dictionary
     Set<String> dictionaryDimensionFromQuery = new HashSet<String>();
     for (int i = 0; i < queryDimensions.size(); i++) {
-      if (queryDimensions.get(i).getDimension().getEncoder().contains(Encoding.DICTIONARY)) {
+      if (queryDimensions.get(i).getDimension().hasEncoding(Encoding.DICTIONARY)) {
         dictionaryDimensionFromQuery.add(queryDimensions.get(i).getDimension().getColumnId());
       }
     }
     for (int i = 0; i < dimAggInfo.size(); i++) {
-      if (dimAggInfo.get(i).getDim().getEncoder().contains(Encoding.DICTIONARY)) {
+      if (dimAggInfo.get(i).getDim().hasEncoding(Encoding.DICTIONARY)) {
         dictionaryDimensionFromQuery.add(dimAggInfo.get(i).getDim().getColumnId());
       }
     }
     for (int i = 0; i < customAggExpression.size(); i++) {
       List<CarbonColumn> referredColumns = customAggExpression.get(i).getReferredColumns();
       for (CarbonColumn column : referredColumns) {
-        if (CarbonUtil.hasEncoding(column.getEncoder(), Encoding.DICTIONARY)) {
+        if (column.hasEncoding(Encoding.DICTIONARY)) {
           dictionaryDimensionFromQuery.add(column.getColumnId());
         }
       }
@@ -397,7 +396,7 @@ public class QueryUtil {
     int index = 0;
     for (int i = 0; i < dimensionCompareIndex.length; i++) {
       Set<Integer> integers = new TreeSet<Integer>();
-      if (!orderByDimensions.get(i).getDimension().getEncoder().contains(Encoding.DICTIONARY)
+      if (!orderByDimensions.get(i).getDimension().hasEncoding(Encoding.DICTIONARY)
           || orderByDimensions.get(i).getDimension().numberOfChild() > 0) {
         continue;
       }
@@ -670,8 +669,7 @@ public class QueryUtil {
       } else {
         // if it is a dictionary column than create a fixed length
         // aggeragtor
-        if (CarbonUtil
-            .hasEncoding(entry.getValue().get(0).getDim().getEncoder(), Encoding.DICTIONARY)) {
+        if (entry.getValue().get(0).getDim().hasEncoding(Encoding.DICTIONARY)) {
           dimensionDataAggregators.add(
               new FixedLengthDimensionAggregator(entry.getValue().get(0), null,
                   columnUniqueIdToDictionaryMap.get(entry.getValue().get(0).getDim().getColumnId()),
@@ -745,7 +743,7 @@ public class QueryUtil {
       Map<Integer, Integer> columnOrdinalToBlockIndexMapping,
       List<Integer> dictionaryDimensionBlockIndex, List<Integer> noDictionaryDimensionBlockIndex) {
     for (QueryDimension queryDimension : queryDimensions) {
-      if (CarbonUtil.hasEncoding(queryDimension.getDimension().getEncoder(), Encoding.DICTIONARY)) {
+      if (queryDimension.getDimension().hasEncoding(Encoding.DICTIONARY)) {
         dictionaryDimensionBlockIndex
             .add(columnOrdinalToBlockIndexMapping.get(queryDimension.getDimension().getOrdinal()));
       } else {

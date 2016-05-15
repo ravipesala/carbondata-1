@@ -99,7 +99,7 @@ public class ExpressionAggregator {
                 row[j] = scannedResult.getDoubleMeasureValue(carbonColumn.getOrdinal());
             }
           }
-        } else if (!CarbonUtil.hasEncoding(carbonColumn.getEncoder(), Encoding.DICTIONARY)) {
+        } else if (!carbonColumn.hasEncoding(Encoding.DICTIONARY)) {
           // for dictionary column get the data
           String noDictionaryColumnData =
               new String(scannedResult.getDimensionKey(carbonColumn.getOrdinal()));

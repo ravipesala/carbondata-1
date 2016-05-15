@@ -933,7 +933,7 @@ public class GraphGenerator {
         break;
       }
 
-      if (!dimension.getEncoder().contains(Encoding.DICTIONARY)) {
+      if (!dimension.hasEncoding(Encoding.DICTIONARY)) {
         noDictionaryMapping.add(true);
         //NoDictionaryMapping[index] = true;
       } else {

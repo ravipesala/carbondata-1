@@ -19,6 +19,7 @@
 package org.carbondata.core.carbon.metadata.schema.table.column;
 
 import java.io.Serializable;
+import java.util.BitSet;
 import java.util.List;
 
 import org.carbondata.core.carbon.metadata.datatype.DataType;
@@ -98,6 +99,11 @@ public class ColumnSchema implements Serializable {
    * used in case of schema restructuring
    */
   private byte[] defaultValue;
+
+  /**
+   * Bit set to recognize the encodings
+   */
+  private BitSet encodingSet = new BitSet();
 
   /**
    * @return the columnName
@@ -300,6 +306,10 @@ public class ColumnSchema implements Serializable {
    */
   public void setEncodingList(List<Encoding> encodingList) {
     this.encodingList = encodingList;
+    encodingSet.clear();
+    for (Encoding encoding : encodingList) {
+      encodingSet.set(encoding.getEncodingIndex());
+    }
   }
 
   /**
@@ -307,11 +317,7 @@ public class ColumnSchema implements Serializable {
    * @return true if contains the passing encoding
    */
   public boolean hasEncoding(Encoding encoding) {
-    if (encodingList == null || encodingList.isEmpty()) {
-      return false;
-    } else {
-      return encodingList.contains(encoding);
-    }
+    return encodingSet.get(encoding.getEncodingIndex());
   }
 
   /**

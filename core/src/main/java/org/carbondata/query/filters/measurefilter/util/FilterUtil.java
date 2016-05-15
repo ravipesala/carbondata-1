@@ -704,7 +704,7 @@ public final class FilterUtil {
     List<CarbonDimension> listOfCarbonDimPartOfKeyGen =
         new ArrayList<CarbonDimension>(carbonDimensions.size());
     for (CarbonDimension carbonDim : carbonDimensions) {
-      if (CarbonUtil.hasEncoding(carbonDim.getEncoder(), Encoding.DICTIONARY)) {
+      if (carbonDim.hasEncoding(Encoding.DICTIONARY)) {
         listOfCarbonDimPartOfKeyGen.add(carbonDim);
       }
 

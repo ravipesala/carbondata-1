@@ -231,12 +231,14 @@ class TableNewProcessor(cm: tableModel, sqlContext: SQLContext) {
     updateColumnGroupsInFields(cm.columnGroups, allColumns)
 
     for (column <- allColumns) {
+      val encodingList = column.getEncodingList
       if (highCardinalityDims.contains(column.getColumnName)) {
-        column.getEncodingList.remove(Encoding.DICTIONARY)
+        encodingList.remove(Encoding.DICTIONARY)
       }
       if (column.getDataType == DataType.TIMESTAMP && isDirectDictionary) {
-        column.getEncodingList.add(Encoding.DIRECT_DICTIONARY)
+        encodingList.add(Encoding.DIRECT_DICTIONARY)
       }
+      column.setEncodingList(encodingList)
     }
 
     var newOrderedDims = scala.collection.mutable.ListBuffer[ColumnSchema]()
