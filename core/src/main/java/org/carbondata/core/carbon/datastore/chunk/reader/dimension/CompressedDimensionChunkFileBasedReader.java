@@ -110,7 +110,7 @@ public class CompressedDimensionChunkFileBasedReader extends AbstractChunkReader
     chunkAttributes.setEachRowSize(eachColumnValueSize[blockIndex]);
     chunkAttributes.setInvertedIndexes(invertedIndexes);
     chunkAttributes.setInvertedIndexesReverse(invertedIndexesReverse);
-    chunkAttributes.setRle(rlePage.length > 0 ? rlePage : null);
+    chunkAttributes.setRle((rlePage != null && rlePage.length > 0) ? rlePage : null);
     DimensionColumnDataChunk columnDataChunk = null;
 
     if (dimensionColumnChunk.get(blockIndex).isRowChunk()) {
