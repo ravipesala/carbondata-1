@@ -132,13 +132,17 @@ public class IncludeFilterExecuterImpl implements FilterExecuter {
     BitSet bitSet = new BitSet(numerOfRows);
     int[] columnIndex = dimensionColumnDataChunk.getAttributes().getInvertedIndexes();
     int[] rle = dimensionColumnDataChunk.getAttributes().getRle();
+    if (rle != null) {
+      numerOfRows = rle.length / 2;
+    }
     int start = 0;
     int last = 0;
     int startIndex = 0;
     byte[][] filterValues = dimColumnExecuterInfo.getFilterKeys();
     for (int i = 0; i < filterValues.length; i++) {
-      start = CarbonUtil.getFirstIndexUsingBinarySearch(dimensionColumnDataChunk, startIndex,
-          dimensionColumnDataChunk.getCompleteDataChunk().length - 1, filterValues[i]);
+      start = CarbonUtil
+          .getFirstIndexUsingBinarySearch(dimensionColumnDataChunk, startIndex, numerOfRows - 1,
+              filterValues[i]);
       if (start == -1) {
         continue;
       }
@@ -183,6 +187,9 @@ public class IncludeFilterExecuterImpl implements FilterExecuter {
       int last = 0;
       int startIndex = 0;
       int[] rle = dimensionColumnDataChunk.getAttributes().getRle();
+      if (rle != null) {
+        numerOfRows = rle.length / 2;
+      }
       byte[][] filterValues = dimColumnExecuterInfo.getFilterKeys();
       for (int k = 0; k < filterValues.length; k++) {
         start = CarbonUtil.getFirstIndexUsingBinarySearch(

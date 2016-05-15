@@ -28,7 +28,6 @@ import org.carbondata.core.carbon.datastore.chunk.impl.VariableLengthDimensionDa
 import org.carbondata.core.carbon.metadata.blocklet.datachunk.DataChunk;
 import org.carbondata.core.carbon.metadata.encoder.Encoding;
 import org.carbondata.core.datastorage.store.FileHolder;
-import org.carbondata.core.datastorage.store.columnar.UnBlockIndexer;
 import org.carbondata.core.util.CarbonUtil;
 
 /**
@@ -102,15 +101,16 @@ public class CompressedDimensionChunkFileBasedReader extends AbstractChunkReader
           .readByteArray(filePath, dimensionColumnChunk.get(blockIndex).getRlePageOffset(),
               dimensionColumnChunk.get(blockIndex).getRlePageLength()));
       // uncompress the data with rle indexes
-      // dataPage = UnBlockIndexer.uncompressData(dataPage, rlePage, eachColumnValueSize[blockIndex]);
-      // rlePage = null;
+      // dataPage = UnBlockIndexer
+      // .uncompressData(dataPage, rlePage, eachColumnValueSize[blockIndex]);
+      // rlePage = null;`
     }
     // fill chunk attributes
     DimensionChunkAttributes chunkAttributes = new DimensionChunkAttributes();
     chunkAttributes.setEachRowSize(eachColumnValueSize[blockIndex]);
     chunkAttributes.setInvertedIndexes(invertedIndexes);
     chunkAttributes.setInvertedIndexesReverse(invertedIndexesReverse);
-    chunkAttributes.setRle(rlePage);
+    chunkAttributes.setRle(rlePage.length > 0 ? rlePage : null);
     DimensionColumnDataChunk columnDataChunk = null;
 
     if (dimensionColumnChunk.get(blockIndex).isRowChunk()) {

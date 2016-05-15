@@ -136,6 +136,9 @@ public class ExcludeFilterExecuterImpl implements FilterExecuter {
     BitSet bitSet = new BitSet(numerOfRows);
     bitSet.flip(0, numerOfRows);
     int[] rle = dimColumnDataChunk.getAttributes().getRle();
+    if (rle != null) {
+      numerOfRows = rle.length / 2;
+    }
     byte[][] filterValues = dimColumnExecuterInfo.getFilterKeys();
     for (int i = 0; i < filterValues.length; i++) {
       startKey = CarbonUtil
@@ -181,6 +184,9 @@ public class ExcludeFilterExecuterImpl implements FilterExecuter {
     bitSet.flip(0, numerOfRows);
     int startIndex = 0;
     int[] rle = dimColumnDataChunk.getAttributes().getRle();
+    if (rle != null) {
+      numerOfRows = rle.length / 2;
+    }
     byte[][] filterValues = dimColumnExecuterInfo.getFilterKeys();
     for (int k = 0; k < filterValues.length; k++) {
       startKey = CarbonUtil
