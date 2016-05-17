@@ -29,26 +29,23 @@ import org.apache.spark.unsafe.types.UTF8String
 
 import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier}
 import org.carbondata.core.constants.CarbonCommonConstants
-import org.carbondata.integration.spark.{RawKeyVal, RawKeyValImpl}
+import org.carbondata.integration.spark.{CarbonFilters, RawKeyVal, RawKeyValImpl}
 import org.carbondata.integration.spark.rdd.CarbonRawQueryRDD
-import org.carbondata.integration.spark.util.CarbonScalaUtil
 import org.carbondata.query.carbon.model._
 import org.carbondata.query.carbon.result.BatchRawResult
 import org.carbondata.query.carbon.wrappers.ByteArrayWrapper
-import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression, Expression => CarbonExpression, LiteralExpression => CarbonLiteralExpression}
-import org.carbondata.query.expression.conditional._
-import org.carbondata.query.expression.logical.{AndExpression, OrExpression}
+import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression}
 
 
 case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
-  relationRaw: CarbonRelation,
-  dimensionPredicatesRaw: Seq[Expression],
-  aggExprsRaw: Option[Seq[Expression]],
-  sortExprsRaw: Option[Seq[SortOrder]],
-  limitExprRaw: Option[Expression],
-  isGroupByPresentRaw: Boolean,
-  detailQueryRaw: Boolean = false,
-  useBinaryAggregator: Boolean)(@transient val ocRaw: SQLContext)
+    relationRaw: CarbonRelation,
+    dimensionPredicatesRaw: Seq[Expression],
+    aggExprsRaw: Option[Seq[Expression]],
+    sortExprsRaw: Option[Seq[SortOrder]],
+    limitExprRaw: Option[Expression],
+    isGroupByPresentRaw: Boolean,
+    detailQueryRaw: Boolean = false,
+    useBinaryAggregator: Boolean)(@transient val ocRaw: SQLContext)
   extends AbstractCubeScan(attributesRaw,
     relationRaw,
     dimensionPredicatesRaw,
@@ -59,7 +56,7 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
     detailQueryRaw)(ocRaw) {
 
   override def processAggregateExpr(plan: CarbonQueryPlan, currentAggregate: AggregateExpression1,
-    queryOrder: Int): Int = {
+      queryOrder: Int): Int = {
 
     currentAggregate match {
       case Sum(attr: AttributeReference) =>
@@ -194,12 +191,13 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
 
   override def processFilterExpressions(plan: CarbonQueryPlan) {
     if (!dimensionPredicatesRaw.isEmpty) {
-      val expressionVal = processExpression(dimensionPredicatesRaw)
+      val expressionVal = CarbonFilters
+        .processExpression(dimensionPredicatesRaw, attributesNeedToDecode, unprocessedExprs)
       expressionVal match {
         case Some(ce) =>
           // adding dimension used in expression in querystats
           ce.getChildren.asScala.filter { x => x.isInstanceOf[CarbonColumnExpression] }
-          .map { y => allDims += y.asInstanceOf[CarbonColumnExpression].getColumnName }
+            .map { y => allDims += y.asInstanceOf[CarbonColumnExpression].getColumnName }
           plan.setFilterExpression(ce)
         case _ =>
       }
@@ -239,70 +237,6 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
     }
   }
 
-  def processExpression(exprs: Seq[Expression]): Option[CarbonExpression] = {
-    def transformExpression(expr: Expression): Option[CarbonExpression] = {
-      expr match {
-        case Or(left, right) =>
-          for {
-            leftFilter <- transformExpression(left)
-            rightFilter <- transformExpression(right)
-          } yield {
-            new OrExpression(leftFilter, rightFilter)
-          }
-
-        case And(left, right) =>
-          (transformExpression(left) ++ transformExpression(right)).reduceOption(new
-              AndExpression(_, _))
-
-        case EqualTo(a: Attribute, FakeCarbonCast(l@Literal(v, t), b)) => new
-            Some(new EqualToExpression(transformExpression(a).get, transformExpression(l).get))
-        case EqualTo(FakeCarbonCast(l@Literal(v, t), b), a: Attribute) => new
-            Some(new EqualToExpression(transformExpression(a).get, transformExpression(l).get))
-        case EqualTo(Cast(a: Attribute, _), FakeCarbonCast(l@Literal(v, t), b)) => new
-            Some(new EqualToExpression(transformExpression(a).get, transformExpression(l).get))
-        case EqualTo(FakeCarbonCast(l@Literal(v, t), b), Cast(a: Attribute, _)) => new
-            Some(new EqualToExpression(transformExpression(a).get, transformExpression(l).get))
-
-        case Not(EqualTo(a: Attribute, FakeCarbonCast(l@Literal(v, t), b))) => new
-            Some(new NotEqualsExpression(transformExpression(a).get, transformExpression(l).get))
-        case Not(EqualTo(FakeCarbonCast(l@Literal(v, t), b), a: Attribute)) => new
-            Some(new NotEqualsExpression(transformExpression(a).get, transformExpression(l).get))
-        case Not(EqualTo(Cast(a: Attribute, _), FakeCarbonCast(l@Literal(v, t), b))) => new
-            Some(new NotEqualsExpression(transformExpression(a).get, transformExpression(l).get))
-        case Not(EqualTo(FakeCarbonCast(l@Literal(v, t), b), Cast(a: Attribute, _))) => new
-            Some(new NotEqualsExpression(transformExpression(a).get, transformExpression(l).get))
-
-        case Not(In(a: Attribute, list)) if !list.exists(!_.isInstanceOf[FakeCarbonCast]) =>
-          Some(new NotInExpression(transformExpression(a).get,
-            new ListExpression(list.map(transformExpression(_).get).asJava)))
-        case In(a: Attribute, list) if !list.exists(!_.isInstanceOf[FakeCarbonCast]) =>
-          Some(new InExpression(transformExpression(a).get,
-            new ListExpression(list.map(transformExpression(_).get).asJava)))
-        case Not(In(Cast(a: Attribute, _), list))
-          if !list.exists(!_.isInstanceOf[FakeCarbonCast]) =>
-          Some(new NotInExpression(transformExpression(a).get,
-            new ListExpression(list.map(transformExpression(_).get).asJava)))
-        case In(Cast(a: Attribute, _), list) if !list.exists(!_.isInstanceOf[FakeCarbonCast]) =>
-          Some(new InExpression(transformExpression(a).get,
-            new ListExpression(list.map(transformExpression(_).get).asJava)))
-
-        case AttributeReference(name, dataType, _, _) =>
-          Some(new CarbonColumnExpression(name.toString,
-            CarbonScalaUtil.convertSparkToCarbonDataType(dataType)))
-        case FakeCarbonCast(literal, dataType) => transformExpression(literal)
-        case Literal(name, dataType) => Some(new
-            CarbonLiteralExpression(name, CarbonScalaUtil.convertSparkToCarbonDataType(dataType)))
-        case Cast(left, right) if (!left.isInstanceOf[Literal]) => transformExpression(left)
-        case others =>
-          others.collect {
-            case attr: AttributeReference => attributesNeedToDecode.add(attr)
-          }
-          unprocessedExprs += others
-          None
-      }
-    }
-    exprs.flatMap(transformExpression).reduceOption(new AndExpression(_, _))
-  }
 
   def inputRdd: CarbonRawQueryRDD[BatchRawResult, Any] = {
 
@@ -321,13 +255,13 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
     buildCarbonPlan.setQueryId(oc.getConf("queryId", System.nanoTime() + ""))
     // scalastyle:off println
     println("Selected Table to Query ****** "
-      + model.getAbsoluteTableIdentifier.getCarbonTableIdentifier.getTableName())
+            + model.getAbsoluteTableIdentifier.getCarbonTableIdentifier.getTableName())
     // scalastyle:on println
 
     val cubeCreationTime = carbonCatalog
-                           .getCubeCreationTime(relationRaw.schemaName, cubeName)
+      .getCubeCreationTime(relationRaw.schemaName, cubeName)
     val schemaLastUpdatedTime = carbonCatalog
-                                .getSchemaLastUpdatedTime(relationRaw.schemaName, cubeName)
+      .getSchemaLastUpdatedTime(relationRaw.schemaName, cubeName)
     val big = new CarbonRawQueryRDD(
       oc.sparkContext,
       model,
@@ -370,7 +304,7 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
 }
 
 class CarbonRawMutableRow(values: Array[Array[Object]],
-  val schema: QuerySchemaInfo) extends GenericMutableRow(values.asInstanceOf[Array[Any]]) {
+    val schema: QuerySchemaInfo) extends GenericMutableRow(values.asInstanceOf[Array[Any]]) {
 
   val dimsLen = schema.getQueryDimensions.length - 1;
   val order = schema.getQueryOrder
@@ -396,55 +330,55 @@ class CarbonRawMutableRow(values: Array[Array[Object]],
 
   override def get(ordinal: Int, dataType: DataType): AnyRef = {
     values(order(ordinal) - dimsLen)(counter)
-    .asInstanceOf[AnyRef]
+      .asInstanceOf[AnyRef]
   }
 
   override def getUTF8String(ordinal: Int): UTF8String = {
     UTF8String
-    .fromString(values(
-      order(ordinal) - dimsLen)(counter)
-                .asInstanceOf[String])
+      .fromString(values(
+        order(ordinal) - dimsLen)(counter)
+        .asInstanceOf[String])
   }
 
   override def getDouble(ordinal: Int): Double = {
     values(order(ordinal) - dimsLen)(counter)
-    .asInstanceOf[Double]
+      .asInstanceOf[Double]
   }
 
   override def getFloat(ordinal: Int): Float = {
     values(order(ordinal) - dimsLen)(counter)
-    .asInstanceOf[Float]
+      .asInstanceOf[Float]
   }
 
   override def getLong(ordinal: Int): Long = {
     values(order(ordinal) - dimsLen)(counter)
-    .asInstanceOf[Long]
+      .asInstanceOf[Long]
   }
 
   override def getByte(ordinal: Int): Byte = {
     values(order(ordinal) - dimsLen)(counter)
-    .asInstanceOf[Byte]
+      .asInstanceOf[Byte]
   }
 
   override def getDecimal(ordinal: Int,
-    precision: Int,
-    scale: Int): Decimal = {
+      precision: Int,
+      scale: Int): Decimal = {
     values(order(ordinal) - dimsLen)(counter).asInstanceOf[Decimal]
   }
 
   override def getBoolean(ordinal: Int): Boolean = {
     values(order(ordinal) - dimsLen)(counter)
-    .asInstanceOf[Boolean]
+      .asInstanceOf[Boolean]
   }
 
   override def getShort(ordinal: Int): Short = {
     values(order(ordinal) - dimsLen)(counter)
-    .asInstanceOf[Short]
+      .asInstanceOf[Short]
   }
 
   override def getInt(ordinal: Int): Int = {
     values(order(ordinal) - dimsLen)(counter)
-    .asInstanceOf[Int]
+      .asInstanceOf[Int]
   }
 
   override def isNullAt(ordinal: Int): Boolean = values(order(ordinal) - dimsLen)(counter) == null

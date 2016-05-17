@@ -144,12 +144,6 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
   @Override public List<InputSplit> getSplits(JobContext job) throws IOException {
     try {
       CarbonTable carbonTable = getCarbonTable(job.getConfiguration());
-      if (carbonTable == null) {
-        carbonTable = new SchemaReader()
-            .readCarbonTableFromStore(getTablePath(job.getConfiguration()),
-                getTableToAccess(job.getConfiguration()));
-        setCarbonTable(job, carbonTable);
-      }
       Object filterPredicates = getFilterPredicates(job.getConfiguration());
       //Get the valid segments from the carbon store.
       SegmentStatusManager.ValidSegmentsInfo validSegments =
@@ -193,25 +187,26 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
   /**
    * It is optional, if user does not set then it reads from store
    *
-   * @param job
+   * @param configuration
    * @param carbonTable
    * @throws IOException
    */
-  public static void setCarbonTable(JobContext job, CarbonTable carbonTable) throws IOException {
+  public static void setCarbonTable(Configuration configuration, CarbonTable carbonTable)
+      throws IOException {
     if (null != carbonTable) {
-      job.getConfiguration()
-          .set(CARBON_TABLE, ObjectSerializationUtil.convertObjectToString(carbonTable));
+      configuration.set(CARBON_TABLE, ObjectSerializationUtil.convertObjectToString(carbonTable));
     }
   }
 
-  private CarbonTable getCarbonTable(Configuration configuration) throws IOException {
+  public static CarbonTable getCarbonTable(Configuration configuration) throws IOException {
     String carbonTableStr = configuration.get(CARBON_TABLE);
     if (carbonTableStr == null) {
-      return null;
+      CarbonTable carbonTable = new SchemaReader()
+          .readCarbonTableFromStore(getTablePath(configuration), getTableToAccess(configuration));
+      setCarbonTable(configuration, carbonTable);
+      return carbonTable;
     }
-    CarbonTable carbonTable =
-        (CarbonTable) ObjectSerializationUtil.convertStringToObject(carbonTableStr);
-    return carbonTable;
+    return (CarbonTable) ObjectSerializationUtil.convertStringToObject(carbonTableStr);
   }
 
   /**
@@ -581,7 +576,7 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
     }
   }
 
-  public CarbonTablePath getTablePath(Configuration configuration) throws IOException {
+  public static CarbonTablePath getTablePath(Configuration configuration) throws IOException {
 
     String storePathString = getStorePathString(configuration);
     CarbonTableIdentifier tableIdentifier = CarbonInputFormat.getTableToAccess(configuration);

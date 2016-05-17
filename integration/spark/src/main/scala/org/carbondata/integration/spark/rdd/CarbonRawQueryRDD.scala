@@ -17,13 +17,10 @@
 
 package org.carbondata.integration.spark.rdd
 
-import java.util
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 
 import org.carbondata.common.logging.LogServiceFactory
-import org.carbondata.core.carbon.datastore.block.TableBlockInfo
 import org.carbondata.core.iterator.CarbonIterator
 import org.carbondata.integration.spark.RawKeyVal
 import org.carbondata.query.carbon.executor.QueryExecutorFactory
@@ -73,18 +70,10 @@ class CarbonRawQueryRDD[K, V](
       var queryStartTime: Long = 0
       try { {
         val carbonSparkPartition = thepartition.asInstanceOf[CarbonSparkPartition]
-        val carbonInputSplit = carbonSparkPartition.serializableHadoopSplit.value
 
+        queryModel.setQueryId(queryModel.getQueryId() + "_" + carbonSparkPartition.idx)
         // fill table block info
-        val tableBlockInfoList = new util.ArrayList[TableBlockInfo]();
-        tableBlockInfoList.add(new TableBlockInfo(carbonInputSplit.getPath.toString,
-          carbonInputSplit.getStart,
-          carbonInputSplit.getSegmentId,
-          carbonInputSplit.getLocations,
-          carbonInputSplit.getLength
-        )
-        )
-        queryModel.setTableBlockInfos(tableBlockInfoList)
+        queryModel.setTableBlockInfos(carbonSparkPartition.tableBlockInfos)
         queryStartTime = System.currentTimeMillis
 
         val carbonPropertiesFilePath = System.getProperty("carbon.properties.filepath", null)

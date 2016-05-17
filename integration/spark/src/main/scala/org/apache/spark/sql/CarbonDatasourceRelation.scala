@@ -23,12 +23,12 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.hadoop.fs.Path
-import org.apache.spark.Logging
+import org.apache.spark._
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.hive.{CarbonMetaData, CarbonMetastoreTypes, TableMeta}
-import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider}
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension
@@ -38,19 +38,25 @@ import org.carbondata.spark.{CarbonOption, _}
  * Carbon relation provider compliant to data source api.
  * Creates carbon relations
  */
-class CarbonSource extends RelationProvider with CreatableRelationProvider {
+class CarbonSource
+  extends RelationProvider with CreatableRelationProvider with HadoopFsRelationProvider {
 
   /**
-    * Returns a new base relation with the given parameters.
-    * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
-    * by the Map that is passed to the function.
-    */
+   * Returns a new base relation with the given parameters.
+   * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
+   * by the Map that is passed to the function.
+   */
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    val options = new CarbonOption(parameters)
-    val tableIdentifier = options.tableIdentifier.split("""\.""").toSeq
-    CarbonDatasourceRelation(tableIdentifier, None)(sqlContext)
+    parameters.get("path") match {
+      case Some(path) => CarbonDatasourceHadoopRelation(sqlContext, Array(path), parameters)
+      case _ =>
+        val options = new CarbonOption(parameters)
+        val tableIdentifier = options.tableIdentifier.split("""\.""").toSeq
+        CarbonDatasourceRelation(tableIdentifier, None)(sqlContext)
+    }
+
   }
 
   override def createRelation(
@@ -97,6 +103,14 @@ class CarbonSource extends RelationProvider with CreatableRelationProvider {
 
     createRelation(sqlContext, parameters)
   }
+
+  override def createRelation(sqlContext: SQLContext,
+      paths: Array[String],
+      dataSchema: Option[StructType],
+      partitionColumns: Option[StructType],
+      parameters: Map[String, String]): HadoopFsRelation = {
+    CarbonDatasourceHadoopRelation(sqlContext, paths, parameters)
+  }
 }
 
 /**
@@ -110,7 +124,8 @@ private[sql] case class CarbonDatasourceRelation(
   extends BaseRelation with Serializable with Logging {
 
   def carbonRelation: CarbonRelation = {
-    CarbonEnv.getInstance(context).carbonCatalog.lookupRelation2(tableIdentifier, None)(sqlContext)
+    CarbonEnv.getInstance(context)
+      .carbonCatalog.lookupRelation2(tableIdentifier, None)(sqlContext)
       .asInstanceOf[CarbonRelation]
   }
 
@@ -124,6 +139,15 @@ private[sql] case class CarbonDatasourceRelation(
  * Represents logical plan for one carbon cube
  */
 case class CarbonRelation(schemaName: String,
+    cubeName: String,
+    metaData: CarbonMetaData,
+    cubeMeta: TableMeta,
+    alias: Option[String])(@transient sqlContext: SQLContext)
+/**
+ * Represents logical plan for one carbon cube
+ */
+case class CarbonRelation(
+    schemaName: String,
     cubeName: String,
     metaData: CarbonMetaData,
     cubeMeta: TableMeta,

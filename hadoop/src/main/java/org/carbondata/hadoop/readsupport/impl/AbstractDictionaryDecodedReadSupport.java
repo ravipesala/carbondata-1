@@ -6,6 +6,7 @@ import org.carbondata.core.cache.CacheType;
 import org.carbondata.core.cache.dictionary.Dictionary;
 import org.carbondata.core.cache.dictionary.DictionaryColumnUniqueIdentifier;
 import org.carbondata.core.carbon.AbsoluteTableIdentifier;
+import org.carbondata.core.carbon.metadata.datatype.DataType;
 import org.carbondata.core.carbon.metadata.encoder.Encoding;
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonColumn;
 import org.carbondata.core.util.CarbonUtilException;
@@ -18,6 +19,8 @@ public abstract class AbstractDictionaryDecodedReadSupport<T> implements CarbonR
 
   protected Dictionary[] dictionaries;
 
+  protected DataType[] dataTypes;
+
   /**
    * It would be instantiated in side the task so the dictionary would be loaded inside every mapper
    * instead of driver.
@@ -28,6 +31,7 @@ public abstract class AbstractDictionaryDecodedReadSupport<T> implements CarbonR
   @Override public void intialize(CarbonColumn[] carbonColumns,
       AbsoluteTableIdentifier absoluteTableIdentifier) {
     dictionaries = new Dictionary[carbonColumns.length];
+    dataTypes = new DataType[carbonColumns.length];
     for (int i = 0; i < carbonColumns.length; i++) {
       if (carbonColumns[i].hasEncoding(Encoding.DICTIONARY)) {
         CacheProvider cacheProvider = CacheProvider.getInstance();
@@ -36,6 +40,7 @@ public abstract class AbstractDictionaryDecodedReadSupport<T> implements CarbonR
         try {
           dictionaries[i] = forwardDictionaryCache.get(new DictionaryColumnUniqueIdentifier(
               absoluteTableIdentifier.getCarbonTableIdentifier(), carbonColumns[i].getColumnId()));
+          dataTypes[i] = carbonColumns[i].getDataType();
         } catch (CarbonUtilException e) {
           throw new RuntimeException(e);
         }

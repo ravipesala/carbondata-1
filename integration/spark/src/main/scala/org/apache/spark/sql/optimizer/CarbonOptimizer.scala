@@ -23,8 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters}
-import org.apache.spark.sql.catalyst.CatalystTypeConverters._
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.{AggregateExpression, Attribute, _}
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -32,6 +31,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.types.IntegerType
+
+import org.carbondata.integration.spark.CarbonFilters
 
 /**
  * Carbon Optimizer to add dictionary decoder.
@@ -41,10 +42,14 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
   val batches = Nil
 
   override def execute(plan: LogicalPlan): LogicalPlan = {
-    val relations = collectCarbonRelation(plan)
     val executedPlan: LogicalPlan = optimizer.execute(plan)
     if (!conf.asInstanceOf[CarbonSQLConf].pushComputation) {
-      new ResolveCarbonFunctions(relations)(executedPlan)
+      val relations = collectCarbonRelation(plan)
+      if(relations.size > 0) {
+        new ResolveCarbonFunctions(relations)(executedPlan)
+      } else {
+        executedPlan
+      }
     } else {
       executedPlan
     }
@@ -309,7 +314,7 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
               }
           }
         }
-        selectFilters(condition, attrsOnConds)
+        CarbonFilters.selectFilters(condition, attrsOnConds)
       }
     }
 
@@ -406,69 +411,5 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
         map += ((carbonRelation.carbonRelation.tableName.toLowerCase, carbonRelation))
     }
     map.toMap
-  }
-
-  // Check out which filters can be pushed down to carbon, remaining can be handled in spark layer.
-  // Mostly dimension filters are only pushed down since it is faster in carbon.
-  def selectFilters(filters: Seq[Expression],
-    attrList: java.util.HashSet[AttributeReference]): Unit = {
-    def translate(expr: Expression): Option[sources.Filter] = {
-      expr match {
-        case Or(left, right) =>
-          for {
-            leftFilter <- translate(left)
-            rightFilter <- translate(right)
-          } yield {
-            sources.Or(leftFilter, rightFilter)
-          }
-
-        case And(left, right) =>
-          (translate(left) ++ translate(right)).reduceOption(sources.And)
-
-        case EqualTo(a: Attribute, Literal(v, t)) =>
-          Some(sources.EqualTo(a.name, convertToScala(v, t)))
-        case EqualTo(FakeCarbonCast(l@Literal(v, t), b), a: Attribute) =>
-          Some(sources.EqualTo(a.name, convertToScala(v, t)))
-        case EqualTo(Cast(a: Attribute, _), Literal(v, t)) =>
-          Some(sources.EqualTo(a.name, convertToScala(v, t)))
-        case EqualTo(Literal(v, t), Cast(a: Attribute, _)) =>
-          Some(sources.EqualTo(a.name, convertToScala(v, t)))
-
-        case Not(EqualTo(a: Attribute, Literal(v, t))) => new
-            Some(sources.Not(sources.EqualTo(a.name, convertToScala(v, t))))
-        case Not(EqualTo(Literal(v, t), a: Attribute)) => new
-            Some(sources.Not(sources.EqualTo(a.name, convertToScala(v, t))))
-        case Not(EqualTo(Cast(a: Attribute, _), Literal(v, t))) => new
-            Some(sources.Not(sources.EqualTo(a.name, convertToScala(v, t))))
-        case Not(EqualTo(Literal(v, t), Cast(a: Attribute, _))) => new
-            Some(sources.Not(sources.EqualTo(a.name, convertToScala(v, t))))
-
-        case Not(In(a: Attribute, list)) if !list.exists(!_.isInstanceOf[Literal]) =>
-          val hSet = list.map(e => e.eval(EmptyRow))
-          val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
-          Some(sources.Not(sources.In(a.name, hSet.toArray.map(toScala))))
-        case In(a: Attribute, list) if !list.exists(!_.isInstanceOf[Literal]) =>
-          val hSet = list.map(e => e.eval(EmptyRow))
-          val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
-          Some(sources.In(a.name, hSet.toArray.map(toScala)))
-        case Not(In(Cast(a: Attribute, _), list))
-          if !list.exists(!_.isInstanceOf[Literal]) =>
-          val hSet = list.map(e => e.eval(EmptyRow))
-          val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
-          Some(sources.Not(sources.In(a.name, hSet.toArray.map(toScala))))
-        case In(Cast(a: Attribute, _), list) if !list.exists(!_.isInstanceOf[Literal]) =>
-          val hSet = list.map(e => e.eval(EmptyRow))
-          val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
-          Some(sources.In(a.name, hSet.toArray.map(toScala)))
-
-        case others =>
-          others.collect {
-            case attr: AttributeReference =>
-              attrList.add(attr)
-          }
-          None
-      }
-    }
-    filters.flatMap(translate).toArray
   }
 }
