@@ -38,9 +38,10 @@ public abstract class AbstractDictionaryDecodedReadSupport<T> implements CarbonR
         Cache<DictionaryColumnUniqueIdentifier, Dictionary> forwardDictionaryCache = cacheProvider
             .createCache(CacheType.FORWARD_DICTIONARY, absoluteTableIdentifier.getStorePath());
         try {
-          dictionaries[i] = forwardDictionaryCache.get(new DictionaryColumnUniqueIdentifier(
-              absoluteTableIdentifier.getCarbonTableIdentifier(), carbonColumns[i].getColumnId()));
           dataTypes[i] = carbonColumns[i].getDataType();
+          dictionaries[i] = forwardDictionaryCache.get(new DictionaryColumnUniqueIdentifier(
+              absoluteTableIdentifier.getCarbonTableIdentifier(), carbonColumns[i].getColumnId(),
+              dataTypes[i]));
         } catch (CarbonUtilException e) {
           throw new RuntimeException(e);
         }

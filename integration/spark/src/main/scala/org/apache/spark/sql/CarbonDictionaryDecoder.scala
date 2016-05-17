@@ -196,7 +196,7 @@ case class CarbonDictionaryDecoder(relations: Map[String, CarbonDatasourceRelati
       if (f._2 != null) {
         cache.get(new DictionaryColumnUniqueIdentifier(
           atiMap.get(f._1).get.getCarbonTableIdentifier,
-          f._2))
+          f._2, f._3))
       } else {
         null
       }

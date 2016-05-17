@@ -22,6 +22,7 @@ import java.util.Date
 
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.{Job, JobID}
@@ -83,17 +84,17 @@ private[sql] case class CarbonDatasourceHadoopRelation(sqlContext: SQLContext,
   override def buildScan(requiredColumns: Array[String],
       filters: Array[Filter],
       inputFiles: Array[FileStatus]): RDD[Row] = {
-
+    val conf = new Configuration(jobConf)
     filters.flatMap(f => CarbonFilters.createCarbonFilter(dataSchema, f))
       .reduceOption(new AndExpression(_, _))
-      .foreach(CarbonInputFormat.setFilterPredicates(jobConf, _))
+      .foreach(CarbonInputFormat.setFilterPredicates(conf, _))
     val projection = new CarbonProjection
     requiredColumns.map(projection.addColumn)
-    CarbonInputFormat.setColumnProjection(projection, jobConf)
-    CarbonInputFormat.setCarbonReadSupport(classOf[SparkRowReadSupportImpl], jobConf)
+    CarbonInputFormat.setColumnProjection(projection, conf)
+    CarbonInputFormat.setCarbonReadSupport(classOf[SparkRowReadSupportImpl], conf)
 
     new CarbonHadoopFSRDD[Row](sqlContext.sparkContext,
-      new SerializableConfiguration(jobConf),
+      new SerializableConfiguration(conf),
       classOf[CarbonInputFormat[Row]],
       classOf[Row])
   }
