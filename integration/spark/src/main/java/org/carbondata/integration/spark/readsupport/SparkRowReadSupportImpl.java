@@ -1,7 +1,10 @@
-package org.carbondata.hadoop.readsupport.impl;
+package org.carbondata.integration.spark.readsupport;
+
+import java.sql.Timestamp;
 
 import org.carbondata.core.carbon.AbsoluteTableIdentifier;
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonColumn;
+import org.carbondata.hadoop.readsupport.impl.AbstractDictionaryDecodedReadSupport;
 import org.carbondata.query.carbon.util.DataTypeUtil;
 
 import org.apache.spark.sql.Row;
@@ -25,6 +28,11 @@ public class SparkRowReadSupportImpl extends AbstractDictionaryDecodedReadSuppor
         switch (dataTypes[i]) {
           case STRING:
             data[i] = UTF8String.fromString(data[i].toString());
+            break;
+          case TIMESTAMP:
+            data[i] = new Timestamp((long) data[i] / 1000);
+            break;
+          default:
         }
       }
     }

@@ -68,25 +68,24 @@ class CarbonRawQueryRDD[K, V](
     val iter = new Iterator[(K, V)] {
       var rowIterator: CarbonIterator[BatchRawResult] = _
       var queryStartTime: Long = 0
-      try { {
+      try {
         val carbonSparkPartition = thepartition.asInstanceOf[CarbonSparkPartition]
+        if(!carbonSparkPartition.tableBlockInfos.isEmpty) {
+          queryModel.setQueryId(queryModel.getQueryId() + "_" + carbonSparkPartition.idx)
+          // fill table block info
+          queryModel.setTableBlockInfos(carbonSparkPartition.tableBlockInfos)
+          queryStartTime = System.currentTimeMillis
 
-        queryModel.setQueryId(queryModel.getQueryId() + "_" + carbonSparkPartition.idx)
-        // fill table block info
-        queryModel.setTableBlockInfos(carbonSparkPartition.tableBlockInfos)
-        queryStartTime = System.currentTimeMillis
-
-        val carbonPropertiesFilePath = System.getProperty("carbon.properties.filepath", null)
-        logInfo("*************************" + carbonPropertiesFilePath)
-        if (null == carbonPropertiesFilePath) {
-          System.setProperty("carbon.properties.filepath",
-            System.getProperty("user.dir") + '/' + "conf" + '/' + "carbon.properties");
+          val carbonPropertiesFilePath = System.getProperty("carbon.properties.filepath", null)
+          logInfo("*************************" + carbonPropertiesFilePath)
+          if (null == carbonPropertiesFilePath) {
+            System.setProperty("carbon.properties.filepath",
+              System.getProperty("user.dir") + '/' + "conf" + '/' + "carbon.properties");
+          }
+          // execute query
+          rowIterator = QueryExecutorFactory.getQueryExecutor(queryModel).execute(queryModel)
+            .asInstanceOf[CarbonIterator[BatchRawResult]]
         }
-        // execute query
-        rowIterator = QueryExecutorFactory.getQueryExecutor(queryModel).execute(queryModel)
-          .asInstanceOf[CarbonIterator[BatchRawResult]]
-      }
-        // TODO: CarbonQueryUtil.isQuickFilter quick filter from dictionary needs to support
       } catch {
         case e: Exception =>
           LOGGER.error(e)
@@ -103,7 +102,7 @@ class CarbonRawQueryRDD[K, V](
 
       override def hasNext: Boolean = {
         if (!finished && !havePair) {
-          finished = !rowIterator.hasNext()
+          finished = (null == rowIterator) || (!rowIterator.hasNext())
           havePair = !finished
         }
         !finished

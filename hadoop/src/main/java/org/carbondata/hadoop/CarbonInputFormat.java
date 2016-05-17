@@ -150,7 +150,9 @@ public class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
           new SegmentStatusManager(getAbsoluteTableIdentifier(job.getConfiguration()))
               .getValidSegments();
       setSegmentsToAccess(job.getConfiguration(), validSegments.listOfValidSegments);
-
+      if(validSegments.listOfValidSegments.isEmpty()) {
+        return new ArrayList<InputSplit>();
+      }
       if (filterPredicates == null) {
         return getSplitsInternal(job);
       } else {
