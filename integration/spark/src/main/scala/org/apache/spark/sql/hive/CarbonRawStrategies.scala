@@ -174,7 +174,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
           val decoder = getCarbonDecoder(relation,
             sc,
             tableName,
-            projectExprsNeedToDecode,
+            projectExprsNeedToDecode.asScala.toSeq,
             scan)
           if (scan.unprocessedExprs.size > 0) {
             val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
@@ -190,7 +190,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
           val decoder = getCarbonDecoder(relation,
             sc,
             tableName,
-            projectExprsNeedToDecode,
+            projectExprsNeedToDecode.asScala.toSeq,
             scan)
           if (scan.unprocessedExprs.size > 0) {
             val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
@@ -218,7 +218,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
       // decode them as well.
       val projectExprsNeedToDecode = new java.util.HashSet[Attribute]()
       val projectSet = AttributeSet(projectList.flatMap(_.references))
-      val scan = CarbonRawCubeScan(projectSet.toSeq,
+      val scan = CarbonRawCubeScan(projectList.map(_.toAttribute),
         relation.carbonRelation,
         predicates,
         None,
@@ -232,7 +232,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         val decoder = getCarbonDecoder(relation,
           sc,
           tableName,
-          projectExprsNeedToDecode,
+          projectExprsNeedToDecode.asScala.toSeq,
           scan)
         if (scan.unprocessedExprs.size > 0) {
           val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
@@ -248,11 +248,11 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
     def getCarbonDecoder(relation: CarbonDatasourceRelation,
         sc: SQLContext,
         tableName: String,
-        projectExprsNeedToDecode: util.HashSet[Attribute],
+        projectExprsNeedToDecode: Seq[Attribute],
         scan: CarbonRawCubeScan): CarbonDictionaryDecoder = {
       val relations = Seq((tableName, relation)).toMap
       val aliasMap = new ArrayBuffer[(String, String)]()
-      val attrs = projectExprsNeedToDecode.asScala.toSeq.map { attr =>
+      val attrs = projectExprsNeedToDecode.map { attr =>
         aliasMap += ((attr.exprId.id.toString, tableName))
         AttributeReference(attr.name,
           attr.dataType,

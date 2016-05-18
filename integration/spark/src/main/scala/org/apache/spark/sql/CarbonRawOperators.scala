@@ -291,7 +291,7 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
       inputRdd.flatMap { row =>
         val buffer = new ArrayBuffer[GenericMutableRow]()
         while (row._1.hasNext) {
-          buffer += new GenericMutableRow(row._1.next().asInstanceOf[Array[Any]])
+          buffer += new GenericMutableRow(row._1.next().map(toType))
         }
         buffer
       }

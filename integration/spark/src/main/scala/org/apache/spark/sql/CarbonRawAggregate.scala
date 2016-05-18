@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.unsafe.types.UTF8String
 
 import org.carbondata.query.carbon.wrappers.ByteArrayWrapper
 
@@ -212,12 +213,18 @@ case class CarbonRawAggregate(
               }
               new GenericMutableRow(currentRow
                                     .parseKey(currentGroup,
-                                      aggregateResults.asInstanceOf[Array[Object]])
-                                    .asInstanceOf[Array[Any]])
+                                      aggregateResults.asInstanceOf[Array[Object]]).map(toType))
             }
           }
         }
       }
+    }
+  }
+
+  def toType(obj: Any): Any = {
+    obj match {
+      case s: String => UTF8String.fromString(s)
+      case _ => obj
     }
   }
 }
