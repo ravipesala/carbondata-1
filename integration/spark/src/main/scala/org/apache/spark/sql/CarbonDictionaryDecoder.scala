@@ -154,32 +154,43 @@ case class CarbonDictionaryDecoder(relations: Map[String, CarbonDatasourceRelati
           new CarbonTableIdentifier(carbonTable.getDatabaseName, carbonTable.getFactTableName)))
       }
 
-      val dataTypes = child.output.map { attr => attr.dataType }
-      child.execute().mapPartitions { iter =>
-        val cacheProvider: CacheProvider = CacheProvider.getInstance
-        val forwardDictionaryCache: Cache[DictionaryColumnUniqueIdentifier, Dictionary] =
-          cacheProvider
-            .createCache(CacheType.FORWARD_DICTIONARY, storePath)
-        val dicts: Seq[Dictionary] = getDictionary(absoluteTableIdentifiers, forwardDictionaryCache)
-        new Iterator[InternalRow] {
-          override final def hasNext: Boolean = iter.hasNext
+      if (isRequiredToDecode) {
+        val dataTypes = child.output.map { attr => attr.dataType }
+        child.execute().mapPartitions { iter =>
+          val cacheProvider: CacheProvider = CacheProvider.getInstance
+          val forwardDictionaryCache: Cache[DictionaryColumnUniqueIdentifier, Dictionary] =
+            cacheProvider
+              .createCache(CacheType.FORWARD_DICTIONARY, storePath)
+          val dicts: Seq[Dictionary] = getDictionary(absoluteTableIdentifiers,
+            forwardDictionaryCache)
+          new Iterator[InternalRow] {
+            override final def hasNext: Boolean = iter.hasNext
 
-          override final def next(): InternalRow = {
-            val row: InternalRow = iter.next()
-            val data = row.toSeq(dataTypes).toArray
-            for (i <- 0 until data.length) {
-              if (dicts(i) != null) {
-                data(i) = toType(DataTypeUtil
-                  .getDataBasedOnDataType(dicts(i)
-                    .getDictionaryValueForKey(data(i).asInstanceOf[Integer]),
-                    getDictionaryColumnIds(i)._3))
+            override final def next(): InternalRow = {
+              val row: InternalRow = iter.next()
+              val data = row.toSeq(dataTypes).toArray
+              for (i <- 0 until data.length) {
+                if (dicts(i) != null) {
+                  data(i) = toType(DataTypeUtil
+                    .getDataBasedOnDataType(dicts(i)
+                      .getDictionaryValueForKey(data(i).asInstanceOf[Integer]),
+                      getDictionaryColumnIds(i)._3))
+                }
               }
+              new GenericMutableRow(data)
             }
-            new GenericMutableRow(data)
           }
         }
+      } else {
+        child.execute()
       }
+    }
+  }
 
+  private def isRequiredToDecode = {
+    getDictionaryColumnIds.find(p => p._1 != null) match {
+      case Some(value) => true
+      case _ => false
     }
   }
 

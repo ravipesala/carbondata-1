@@ -18,6 +18,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.util
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
@@ -25,7 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, _}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, QueryPlanner}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Filter => LogicalFilter, LogicalPlan}
 import org.apache.spark.sql.execution.{Filter, Project, SparkPlan}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 
@@ -51,15 +53,19 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
       plan match {
         case PhysicalOperation(projectList, predicates,
         l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)) =>
-          carbonRawScan(projectList,
-            predicates,
-            carbonRelation,
-            l,
-            None,
-            None,
-            false,
-            true,
-            false)(sqlContext)._1 :: Nil
+          if (isStarQuery(plan)) {
+            carbonRawScanForStarQuery(projectList, predicates, carbonRelation, l)(sqlContext) :: Nil
+          } else {
+            carbonRawScan(projectList,
+              predicates,
+              carbonRelation,
+              l,
+              None,
+              None,
+              false,
+              true,
+              false)(sqlContext)._1 :: Nil
+          }
 
         case catalyst.planning.PartialAggregation(
         namedGroupingAttributes,
@@ -80,15 +86,15 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
 
 
     def handleRawAggregation(plan: LogicalPlan,
-      aggPlan: LogicalPlan,
-      projectList: Seq[NamedExpression],
-      predicates: Seq[Expression],
-      carbonRelation: CarbonDatasourceRelation,
-      logicalRelation: LogicalRelation,
-      partialComputation: Seq[NamedExpression],
-      groupingExpressions: Seq[Expression],
-      namedGroupingAttributes: Seq[Attribute],
-      rewrittenAggregateExpressions: Seq[NamedExpression]):
+        aggPlan: LogicalPlan,
+        projectList: Seq[NamedExpression],
+        predicates: Seq[Expression],
+        carbonRelation: CarbonDatasourceRelation,
+        logicalRelation: LogicalRelation,
+        partialComputation: Seq[NamedExpression],
+        groupingExpressions: Seq[Expression],
+        namedGroupingAttributes: Seq[Attribute],
+        rewrittenAggregateExpressions: Seq[NamedExpression]):
     Seq[SparkPlan] = {
       val (_, _, _, aliases, groupExprs, substitutesortExprs, limitExpr) = extractPlan(plan)
 
@@ -131,14 +137,14 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
      * Create carbon scan
      */
     private def carbonRawScan(projectList: Seq[NamedExpression],
-      predicates: Seq[Expression],
-      relation: CarbonDatasourceRelation,
-      logicalRelation: LogicalRelation,
-      groupExprs: Option[Seq[Expression]],
-      limitExpr: Option[Expression],
-      isGroupByPresent: Boolean,
-      detailQuery: Boolean,
-      useBinaryAggregation: Boolean)(sc: SQLContext): (SparkPlan, Boolean) = {
+        predicates: Seq[Expression],
+        relation: CarbonDatasourceRelation,
+        logicalRelation: LogicalRelation,
+        groupExprs: Option[Seq[Expression]],
+        limitExpr: Option[Expression],
+        isGroupByPresent: Boolean,
+        detailQuery: Boolean,
+        useBinaryAggregation: Boolean)(sc: SQLContext): (SparkPlan, Boolean) = {
 
       val tableName: String =
         relation.carbonRelation.metaData.carbonTable.getFactTableName.toLowerCase
@@ -152,19 +158,6 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
           others.references.map(f => projectExprsNeedToDecode.add(f))
       }
       val projectSet = AttributeSet(projectList.flatMap(_.references))
-      val filterSet = AttributeSet(predicates.flatMap(_.references))
-      val filterCondition = predicates.reduceLeftOption(expressions.And)
-      var filtersSubset = true
-      val requestedColumns = {
-        if (projectList.map(_.toAttribute) == projectList &&
-          projectSet.size == projectList.size &&
-          filterSet.subsetOf(projectSet)) {
-          projectList.asInstanceOf[Seq[Attribute]] // Safe due to if above.
-        } else {
-          filtersSubset = false
-          (projectSet ++ filterSet).toSeq
-        }
-      }
       val scan = CarbonRawCubeScan(projectSet.toSeq,
         relation.carbonRelation,
         predicates,
@@ -176,19 +169,13 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         useBinaryAggregation)(sqlContext)
       val dimAggrsPresence: Boolean = scan.buildCarbonPlan.getDimAggregatorInfos.size() > 0
       projectExprsNeedToDecode.addAll(scan.attributesNeedToDecode)
-      if (detailQuery == false) {
+      if (!detailQuery) {
         if (projectExprsNeedToDecode.size > 0) {
-          val relations = Seq((tableName, relation)).toMap
-          val aliasMap = new ArrayBuffer[(String, String)]()
-          val attrs = projectExprsNeedToDecode.asScala.toSeq.map { attr =>
-            aliasMap += ((attr.exprId.id.toString, tableName))
-            AttributeReference(attr.name,
-              attr.dataType,
-              attr.nullable,
-              attr.metadata)(attr.exprId, Seq(tableName))
-          }
-          val decoder =
-            CarbonDictionaryDecoder(relations, IncludeProfile(attrs), aliasMap.toMap, scan)(sc)
+          val decoder = getCarbonDecoder(relation,
+            sc,
+            tableName,
+            projectExprsNeedToDecode,
+            scan)
           if (scan.unprocessedExprs.size > 0) {
             val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
             (Project(projectList, filterCondToAdd.map(Filter(_, decoder)).getOrElse(decoder)), true)
@@ -200,17 +187,11 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         }
       } else {
         if (projectExprsNeedToDecode.size() > 0) {
-          val relations = Seq((tableName, relation)).toMap
-          val aliasMap = new ArrayBuffer[(String, String)]()
-          val attrs = projectExprsNeedToDecode.asScala.toSeq.map { attr =>
-            aliasMap += ((attr.exprId.id.toString, tableName))
-            AttributeReference(attr.name,
-              attr.dataType,
-              attr.nullable,
-              attr.metadata)(attr.exprId, Seq(tableName))
-          }
-          val decoder =
-            CarbonDictionaryDecoder(relations, IncludeProfile(attrs), aliasMap.toMap, scan)(sc)
+          val decoder = getCarbonDecoder(relation,
+            sc,
+            tableName,
+            projectExprsNeedToDecode,
+            scan)
           if (scan.unprocessedExprs.size > 0) {
             val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
             (Project(projectList, filterCondToAdd.map(Filter(_, decoder)).getOrElse(decoder)), true)
@@ -221,6 +202,66 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
           (Project(projectList, scan), dimAggrsPresence)
         }
       }
+    }
+
+    /**
+     * Create carbon scan for star query
+     */
+    private def carbonRawScanForStarQuery(projectList: Seq[NamedExpression],
+        predicates: Seq[Expression],
+        relation: CarbonDatasourceRelation,
+        logicalRelation: LogicalRelation)(sc: SQLContext): SparkPlan = {
+
+      val tableName: String =
+        relation.carbonRelation.metaData.carbonTable.getFactTableName.toLowerCase
+      // Check out any expressions are there in project list. if they are present then we need to
+      // decode them as well.
+      val projectExprsNeedToDecode = new java.util.HashSet[Attribute]()
+      val projectSet = AttributeSet(projectList.flatMap(_.references))
+      val scan = CarbonRawCubeScan(projectSet.toSeq,
+        relation.carbonRelation,
+        predicates,
+        None,
+        None,
+        None,
+        false,
+        true,
+        false)(sqlContext)
+      projectExprsNeedToDecode.addAll(scan.attributesNeedToDecode)
+      if (projectExprsNeedToDecode.size() > 0) {
+        val decoder = getCarbonDecoder(relation,
+          sc,
+          tableName,
+          projectExprsNeedToDecode,
+          scan)
+        if (scan.unprocessedExprs.size > 0) {
+          val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
+          filterCondToAdd.map(Filter(_, decoder)).getOrElse(decoder)
+        } else {
+          decoder
+        }
+      } else {
+        scan
+      }
+    }
+
+    def getCarbonDecoder(relation: CarbonDatasourceRelation,
+        sc: SQLContext,
+        tableName: String,
+        projectExprsNeedToDecode: util.HashSet[Attribute],
+        scan: CarbonRawCubeScan): CarbonDictionaryDecoder = {
+      val relations = Seq((tableName, relation)).toMap
+      val aliasMap = new ArrayBuffer[(String, String)]()
+      val attrs = projectExprsNeedToDecode.asScala.toSeq.map { attr =>
+        aliasMap += ((attr.exprId.id.toString, tableName))
+        AttributeReference(attr.name,
+          attr.dataType,
+          attr.nullable,
+          attr.metadata)(attr.exprId, Seq(tableName))
+      }
+      val decoder =
+        CarbonDictionaryDecoder(relations, IncludeProfile(attrs), aliasMap.toMap, scan)(sc)
+      decoder
     }
 
     private def extractPlan(plan: LogicalPlan) = {
@@ -240,6 +281,15 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         case others => others
       }
       (a, b, c, aliases, groupExprs, substitutesortExprs, limitExpr)
+    }
+
+    private def isStarQuery(plan: LogicalPlan) = {
+      plan match {
+        case LogicalFilter(condition,
+        LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)) => true
+        case LogicalRelation(carbonRelation: CarbonDatasourceRelation, _) => true
+        case _ => false
+      }
     }
   }
 

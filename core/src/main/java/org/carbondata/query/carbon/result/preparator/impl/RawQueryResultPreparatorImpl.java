@@ -54,7 +54,9 @@ public class RawQueryResultPreparatorImpl extends AbstractQueryResultPreparator<
 
   @Override public BatchRawResult prepareQueryResult(Result scannedResult) {
     if ((null == scannedResult || scannedResult.size() < 1)) {
-      return new BatchRawResult(new Object[0][0]);
+      BatchRawResult batchRawResult = new BatchRawResult(new Object[0][0]);
+      batchRawResult.setQuerySchemaInfo(querySchemaInfo);
+      return batchRawResult;
     }
     int msrSize = queryExecuterProperties.measureAggregators.length;
     int totalNumberOfColumn = msrSize + 1;

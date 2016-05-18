@@ -58,7 +58,10 @@ private[sql] case class CarbonDatasourceHadoopRelation(sqlContext: SQLContext,
     val identifier = new CarbonTableIdentifier(options.dbName, options.tableName)
     CarbonInputFormat.setTableToAccess(job.getConfiguration, identifier)
     val table = CarbonInputFormat.getCarbonTable(job.getConfiguration)
-
+    if(table == null) {
+      sys.error(s"Store path ${paths(0)} is not valid or " +
+                s"table ${identifier.getTableUniqueName}  does not exist in path.")
+    }
     val relation = CarbonRelation(table.getDatabaseName,
       table.getFactTableName,
       CarbonSparkUtil.createSparkMeta(table),

@@ -218,6 +218,15 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
             } else {
               Project(prExps, p.child)
             }
+          case l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _) =>
+            if (!decoder) {
+              decoder = true
+              CarbonDictionaryCatalystDecoder(relations,
+                IncludeProfile(Seq()),
+                Map(), l)
+            } else {
+              l
+            }
           case others => others
         }
       attrsOnJoin.addAll(attrsOndimAggs)
@@ -248,15 +257,10 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
       aliasMap: util.HashMap[String, String]) {
 
       plan transformUp {
-        case project@Project(projectList, Filter(condition, child)) =>
-          collectProjectsAndConditions(project)
-          project
-        case filter@Filter(condition, Project(projectList, child)) =>
-          collectProjectsAndConditions(filter)
-          filter
-        case project@Project(projectList, child) =>
-          collectProjectsAndConditions(project)
-          project
+        case po@ PhysicalOperation(projectList, predicates,
+        l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)) =>
+          collectProjectsAndConditions(po)
+          po
         case agg: Aggregate =>
           agg.aggregateExpressions.map { aggExp =>
             aggExp.transform {

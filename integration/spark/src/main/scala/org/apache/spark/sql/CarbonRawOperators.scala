@@ -80,7 +80,7 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.length > 0) {
           val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.COUNT)
+          m1.setAggregateFunction(CarbonCommonConstants.SUM)
           m1.setQueryOrder(queryOrder)
           plan.addMeasure(m1)
         } else {
@@ -103,7 +103,7 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.length > 0) {
           val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.DISTINCT_COUNT)
+          m1.setAggregateFunction(CarbonCommonConstants.SUM)
           m1.setQueryOrder(queryOrder)
           plan.addMeasure(m1)
         } else {
@@ -120,7 +120,7 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.length > 0) {
           val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.AVERAGE)
+          m1.setAggregateFunction(CarbonCommonConstants.SUM)
           m1.setQueryOrder(queryOrder)
           plan.addMeasure(m1)
         } else {
@@ -137,7 +137,7 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.length > 0) {
           val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.MIN)
+          m1.setAggregateFunction(CarbonCommonConstants.SUM)
           m1.setQueryOrder(queryOrder)
           plan.addMeasure(m1)
         } else {
@@ -154,7 +154,7 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.length > 0) {
           val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.MAX)
+          m1.setAggregateFunction(CarbonCommonConstants.SUM)
           m1.setQueryOrder(queryOrder)
           plan.addMeasure(m1)
         } else {
@@ -171,7 +171,7 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.length > 0) {
           val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.SUM_DISTINCT)
+          m1.setAggregateFunction(CarbonCommonConstants.SUM)
           m1.setQueryOrder(queryOrder)
           plan.addMeasure(m1)
         } else {
@@ -309,6 +309,13 @@ class CarbonRawMutableRow(values: Array[Array[Object]],
   val dimsLen = schema.getQueryDimensions.length - 1;
   val order = schema.getQueryOrder
   var counter = 0;
+  val size = {
+    if (values.size > 0) {
+      values(0).length
+    } else {
+      0
+    }
+  }
 
   def getKey(): ByteArrayWrapper = values(0)(counter).asInstanceOf[ByteArrayWrapper]
 
@@ -317,7 +324,7 @@ class CarbonRawMutableRow(values: Array[Array[Object]],
   }
 
   def hasNext(): Boolean = {
-    counter < values(0).length
+    counter < size
   }
 
   def next(): Unit = {

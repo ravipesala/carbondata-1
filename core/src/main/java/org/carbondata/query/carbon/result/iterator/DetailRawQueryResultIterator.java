@@ -73,13 +73,9 @@ public class DetailRawQueryResultIterator
     }
     if (null != result) {
       Result next = result.next();
-      if (next.size() > 0) {
-        return queryResultPreparator.prepareQueryResult(next);
-      } else {
-        return new BatchRawResult(new Object[0][0]);
-      }
+      return queryResultPreparator.prepareQueryResult(next);
     } else {
-      return new BatchRawResult(new Object[0][0]);
+      return queryResultPreparator.prepareQueryResult(null);
     }
   }
 }
