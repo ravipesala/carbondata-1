@@ -28,10 +28,10 @@ import java.util.Map;
 import org.carbondata.common.logging.LogService;
 import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.constants.CarbonCommonConstants;
+import org.carbondata.query.carbon.model.CarbonQueryPlan;
 import org.carbondata.query.queryinterface.query.metadata.CarbonDimensionLevelFilter;
 import org.carbondata.spark.partition.api.DataPartitioner;
 import org.carbondata.spark.partition.api.Partition;
-import org.carbondata.spark.query.CarbonQueryPlan;
 import org.carbondata.spark.query.metadata.CarbonDimensionFilter;
 
 import org.apache.spark.sql.execution.command.Partitioner;

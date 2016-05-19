@@ -15,18 +15,18 @@
  * limitations under the License.
  */
 
-package org.carbondata.integration.spark.rdd
+package org.carbondata.spark.rdd
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 
 import org.carbondata.common.logging.LogServiceFactory
 import org.carbondata.core.iterator.CarbonIterator
-import org.carbondata.integration.spark.RawKeyVal
 import org.carbondata.query.carbon.executor.QueryExecutorFactory
 import org.carbondata.query.carbon.model.QueryModel
 import org.carbondata.query.carbon.result.BatchRawResult
 import org.carbondata.query.expression.Expression
+import org.carbondata.spark.RawKeyVal
 
 
 /**

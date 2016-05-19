@@ -1,4 +1,4 @@
-package org.carbondata.integration.spark.readsupport;
+package org.carbondata.spark.readsupport;
 
 import java.sql.Timestamp;
 

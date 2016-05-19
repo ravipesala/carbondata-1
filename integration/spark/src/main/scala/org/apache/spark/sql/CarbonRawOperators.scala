@@ -29,12 +29,12 @@ import org.apache.spark.unsafe.types.UTF8String
 
 import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier}
 import org.carbondata.core.constants.CarbonCommonConstants
-import org.carbondata.integration.spark.{CarbonFilters, RawKeyVal, RawKeyValImpl}
-import org.carbondata.integration.spark.rdd.CarbonRawQueryRDD
 import org.carbondata.query.carbon.model._
 import org.carbondata.query.carbon.result.BatchRawResult
 import org.carbondata.query.carbon.wrappers.ByteArrayWrapper
 import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression}
+import org.carbondata.spark.{CarbonFilters, RawKeyVal, RawKeyValImpl}
+import org.carbondata.spark.rdd.CarbonRawQueryRDD
 
 
 case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],

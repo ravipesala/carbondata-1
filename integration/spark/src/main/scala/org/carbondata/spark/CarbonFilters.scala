@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.carbondata.integration.spark
+package org.carbondata.spark
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -25,10 +25,10 @@ import org.apache.spark.sql.FakeCarbonCast
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
 
-import org.carbondata.integration.spark.util.CarbonScalaUtil
 import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression, Expression => CarbonExpression, LiteralExpression => CarbonLiteralExpression}
 import org.carbondata.query.expression.conditional._
 import org.carbondata.query.expression.logical.{AndExpression, OrExpression}
+import org.carbondata.spark.util.CarbonScalaUtil
 
 /**
  * All filter coversions are done here.

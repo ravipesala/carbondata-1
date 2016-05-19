@@ -30,13 +30,11 @@ import org.apache.spark.rdd.RDD
 import org.carbondata.common.logging.LogServiceFactory
 import org.carbondata.core.carbon.datastore.block.TableBlockInfo
 import org.carbondata.core.iterator.CarbonIterator
-import org.carbondata.hadoop.util.CarbonInputFormatUtil
 import org.carbondata.hadoop.{CarbonInputFormat, CarbonInputSplit}
 import org.carbondata.query.carbon.executor.QueryExecutorFactory
 import org.carbondata.query.carbon.model.QueryModel
 import org.carbondata.query.carbon.result.RowResult
 import org.carbondata.query.expression.Expression
-import org.carbondata.query.filter.resolver.FilterResolverIntf
 import org.carbondata.spark.KeyVal
 import org.carbondata.spark.load.CarbonLoaderUtil
 import org.carbondata.spark.util.QueryPlanUtil

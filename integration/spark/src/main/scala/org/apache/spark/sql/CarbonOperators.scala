@@ -49,9 +49,8 @@ import org.carbondata.query.scanner.impl.{CarbonKey, CarbonValue}
 import org.carbondata.spark.agg._
 import org.carbondata.spark.KeyVal
 import org.carbondata.spark.KeyValImpl
-import org.carbondata.spark.query.CarbonQueryPlan
 import org.carbondata.spark.rdd.CarbonQueryRDD
-import org.carbondata.spark.util.{CarbonQueryUtil, CarbonScalaUtil, QueryPlanUtil}
+import org.carbondata.spark.util.{CarbonScalaUtil, QueryPlanUtil}
 
 case class CarbonCubeScan(
     var attributes: Seq[Attribute],

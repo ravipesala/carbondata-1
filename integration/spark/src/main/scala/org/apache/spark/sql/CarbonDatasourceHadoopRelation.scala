@@ -31,7 +31,7 @@ import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.cubemodel.Partitioner
+import org.apache.spark.sql.execution.command.Partitioner
 import org.apache.spark.sql.hive.TableMeta
 import org.apache.spark.sql.sources.{Filter, HadoopFsRelation, OutputWriterFactory}
 import org.apache.spark.sql.types.StructType
@@ -39,10 +39,10 @@ import org.apache.spark.util.SerializableConfiguration
 
 import org.carbondata.core.carbon.CarbonTableIdentifier
 import org.carbondata.hadoop.{CarbonInputFormat, CarbonInputSplit, CarbonProjection}
-import org.carbondata.integration.spark.{CarbonFilters, CarbonOption}
-import org.carbondata.integration.spark.readsupport.SparkRowReadSupportImpl
-import org.carbondata.integration.spark.util.CarbonScalaUtil.CarbonSparkUtil
 import org.carbondata.query.expression.logical.AndExpression
+import org.carbondata.spark.{CarbonFilters, CarbonOption}
+import org.carbondata.spark.readsupport.SparkRowReadSupportImpl
+import org.carbondata.spark.util.CarbonScalaUtil.CarbonSparkUtil
 
 private[sql] case class CarbonDatasourceHadoopRelation(sqlContext: SQLContext,
     paths: Array[String],

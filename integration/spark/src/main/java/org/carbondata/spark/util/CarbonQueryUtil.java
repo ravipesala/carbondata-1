@@ -32,11 +32,11 @@ import org.carbondata.core.datastorage.store.filesystem.CarbonFileFilter;
 import org.carbondata.core.datastorage.store.impl.FileFactory;
 import org.carbondata.core.datastorage.store.impl.FileFactory.FileType;
 import org.carbondata.core.load.LoadMetadataDetails;
+import org.carbondata.query.carbon.model.CarbonQueryPlan;
 import org.carbondata.spark.partition.api.Partition;
 import org.carbondata.spark.partition.api.impl.DefaultLoadBalancer;
 import org.carbondata.spark.partition.api.impl.PartitionMultiFileImpl;
 import org.carbondata.spark.partition.api.impl.QueryPartitionHelper;
-import org.carbondata.spark.query.CarbonQueryPlan;
 import org.carbondata.spark.splits.TableSplit;
 
 import org.apache.spark.sql.execution.command.Partitioner;

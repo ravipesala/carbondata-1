@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.carbondata.integration.spark.testsuite.hadooprelation
+package org.carbondata.spark.testsuite.hadooprelation
 
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.common.util.CarbonHiveContext._
