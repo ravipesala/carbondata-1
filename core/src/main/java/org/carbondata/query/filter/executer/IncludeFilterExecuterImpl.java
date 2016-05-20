@@ -150,7 +150,8 @@ public class IncludeFilterExecuterImpl implements FilterExecuter {
         // take advantage of rle
         int rleIndexSize = rle[(start*2) + 1];
         int size = CarbonUtil.calculateRleIndexSize(start, rle);
-        for (int j = size; j < size + rleIndexSize; j++) {
+        int totalSize = size + rleIndexSize;
+        for (int j = size; j < totalSize; j++) {
           bitSet.set(columnIndex[j]);
         }
       } else {
@@ -202,9 +203,8 @@ public class IncludeFilterExecuterImpl implements FilterExecuter {
           // take advantage of rle
           int rleIndexSize = rle[(start * 2) + 1];
           int size = CarbonUtil.calculateRleIndexSize(start, rle);
-          for (int j = size; j < size + rleIndexSize; j++) {
-            bitSet.set(j);
-          }
+          int totalSize = size + rleIndexSize;
+          bitSet.set(size, totalSize-1);
         } else {
           bitSet.set(start);
           last = start;

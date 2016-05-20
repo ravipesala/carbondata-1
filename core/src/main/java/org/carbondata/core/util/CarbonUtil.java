@@ -1679,7 +1679,8 @@ public final class CarbonUtil {
    */
   public static int calculateRleIndexSize(int index, int[] rle) {
     int size = 0;
-    for (int i = 1; i < index * 2; i += 2) {
+    int len = index * 2;
+    for (int i = 1; i < len; i += 2) {
       size = rle[i] + size;
     }
     return size;
