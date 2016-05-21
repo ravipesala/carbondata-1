@@ -18,8 +18,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.util
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
@@ -40,14 +38,14 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
   val LOGGER = LogServiceFactory.getLogService("CarbonRawStrategies")
 
   def getStrategies: Seq[Strategy] = {
-    val total = sqlContext.planner.strategies :+ CarbonRawTableScan
+    val total = sqlContext.planner.strategies :+ CarbonRawTableScans
     total
   }
 
   /**
    * Carbon strategies for Carbon cube scanning
    */
-  private[sql] object CarbonRawTableScan extends Strategy {
+  private[sql] object CarbonRawTableScans extends Strategy {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = {
       plan match {

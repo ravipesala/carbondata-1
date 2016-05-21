@@ -52,14 +52,14 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
   val LOGGER = LogServiceFactory.getLogService("CarbonStrategies")
 
   def getStrategies: Seq[Strategy] = {
-    val total = sqlContext.planner.strategies :+ CarbonTableScan :+ DDLStrategies
+    val total = sqlContext.planner.strategies :+ CarbonTableScans :+ DDLStrategies
     total
   }
 
   /**
    * Carbon strategies for Carbon cube scanning
    */
-  private[sql] object CarbonTableScan extends Strategy {
+  private[sql] object CarbonTableScans extends Strategy {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = {
       plan match {

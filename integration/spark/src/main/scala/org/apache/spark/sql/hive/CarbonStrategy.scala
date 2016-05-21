@@ -26,10 +26,10 @@ private[sql] object CarbonStrategy {
   def getStrategy(context: SQLContext): Seq[Strategy] = {
     val carbonStrategy = new CarbonStrategies(context)
     if (context.conf.asInstanceOf[CarbonSQLConf].pushComputation) {
-      Seq(carbonStrategy.CarbonTableScan, carbonStrategy.DDLStrategies)
+      Seq(carbonStrategy.CarbonTableScans, carbonStrategy.DDLStrategies)
     } else {
       // TODO: need to remove duplicate code in strategies.
-      Seq(new CarbonRawStrategies(context).CarbonRawTableScan, carbonStrategy.DDLStrategies)
+      Seq(new CarbonRawStrategies(context).CarbonRawTableScans, carbonStrategy.DDLStrategies)
     }
   }
 }
