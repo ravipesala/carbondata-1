@@ -37,7 +37,7 @@ import org.carbondata.spark.{CarbonFilters, RawKeyVal, RawKeyValImpl}
 import org.carbondata.spark.rdd.CarbonRawQueryRDD
 
 
-case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
+case class CarbonRawTableScan(var attributesRaw: Seq[Attribute],
     relationRaw: CarbonRelation,
     dimensionPredicatesRaw: Seq[Expression],
     aggExprsRaw: Option[Seq[Expression]],
@@ -46,7 +46,7 @@ case class CarbonRawCubeScan(var attributesRaw: Seq[Attribute],
     isGroupByPresentRaw: Boolean,
     detailQueryRaw: Boolean = false,
     useBinaryAggregator: Boolean)(@transient val ocRaw: SQLContext)
-  extends AbstractCubeScan(attributesRaw,
+  extends AbstractTableScan(attributesRaw,
     relationRaw,
     dimensionPredicatesRaw,
     aggExprsRaw,

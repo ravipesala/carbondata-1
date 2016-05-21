@@ -28,10 +28,8 @@ import org.carbondata.core.carbon.metadata.schema.table.column.CarbonMeasure;
 import org.carbondata.query.carbon.model.CarbonQueryPlan;
 import org.carbondata.query.carbon.model.QueryDimension;
 import org.carbondata.query.carbon.model.QueryMeasure;
-import org.carbondata.query.directinterface.impl.CarbonQueryParseUtil;
-import org.carbondata.query.expression.ColumnExpression;
+import org.carbondata.query.carbon.model.QueryModel;
 import org.carbondata.query.expression.Expression;
-import org.carbondata.query.expression.conditional.ConditionalExpression;
 import org.carbondata.query.filter.resolver.FilterResolverIntf;
 import org.carbondata.query.filters.FilterExpressionProcessor;
 
@@ -70,8 +68,7 @@ public class CarbonInputFormatUtil {
         } else {
           CarbonMeasure measure = carbonTable.getMeasureByName(factTableName, column);
           if (measure == null) {
-            throw new RuntimeException(
-                column + " column not found in the table " + factTableName);
+            throw new RuntimeException(column + " column not found in the table " + factTableName);
           }
           addQueryMeasure(plan, i, measure);
           i++;
@@ -105,56 +102,7 @@ public class CarbonInputFormatUtil {
         carbonTable.getDimensionByTableName(carbonTable.getFactTableName());
     List<CarbonMeasure> measures =
         carbonTable.getMeasureByTableName(carbonTable.getFactTableName());
-    processFilterExpression(filterExpression, dimensions, measures);
-  }
-
-  private static void processFilterExpression(Expression filterExpression,
-      List<CarbonDimension> dimensions, List<CarbonMeasure> measures) {
-    if (null != filterExpression) {
-      if (null != filterExpression.getChildren() && filterExpression.getChildren().size() == 0) {
-        if (filterExpression instanceof ConditionalExpression) {
-          List<ColumnExpression> listOfCol =
-              ((ConditionalExpression) filterExpression).getColumnList();
-          for (ColumnExpression expression : listOfCol) {
-            setDimAndMsrColumnNode(dimensions, measures, (ColumnExpression) expression);
-          }
-        }
-      }
-      for (Expression expression : filterExpression.getChildren()) {
-
-        if (expression instanceof ColumnExpression) {
-          setDimAndMsrColumnNode(dimensions, measures, (ColumnExpression) expression);
-        } else {
-          processFilterExpression(expression, dimensions, measures);
-        }
-      }
-    }
-  }
-
-  private static void setDimAndMsrColumnNode(List<CarbonDimension> dimensions,
-      List<CarbonMeasure> measures, ColumnExpression col) {
-    CarbonDimension dim;
-    CarbonMeasure msr;
-    String columnName;
-    columnName = col.getColumnName();
-    dim = CarbonQueryParseUtil.findDimension(dimensions, columnName);
-    col.setCarbonColumn(dim);
-    col.setDimension(dim);
-    col.setDimension(true);
-    if (null == dim) {
-      msr = getCarbonMetadataMeasure(columnName, measures);
-      col.setCarbonColumn(msr);
-      col.setDimension(false);
-    }
-  }
-
-  private static CarbonMeasure getCarbonMetadataMeasure(String name, List<CarbonMeasure> measures) {
-    for (CarbonMeasure measure : measures) {
-      if (measure.getColName().equalsIgnoreCase(name)) {
-        return measure;
-      }
-    }
-    return null;
+    QueryModel.processFilterExpression(filterExpression, dimensions, measures);
   }
 
   /**

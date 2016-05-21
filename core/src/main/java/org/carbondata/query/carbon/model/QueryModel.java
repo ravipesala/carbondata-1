@@ -32,7 +32,7 @@ import org.carbondata.core.carbon.metadata.schema.table.column.CarbonColumn;
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension;
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonMeasure;
 import org.carbondata.core.constants.CarbonCommonConstants;
-import org.carbondata.query.directinterface.impl.CarbonQueryParseUtil;
+import org.carbondata.core.util.CarbonUtil;
 import org.carbondata.query.expression.ColumnExpression;
 import org.carbondata.query.expression.Expression;
 import org.carbondata.query.expression.UnknownExpression;
@@ -186,7 +186,7 @@ public class QueryModel implements Serializable {
     queryModel.setQueryMeasures(
         queryPlan.getMeasures());
     if (null != queryPlan.getFilterExpression()) {
-      traverseAndSetDimensionOrMsrTypeForColumnExpressions(queryPlan.getFilterExpression(),
+      processFilterExpression(queryPlan.getFilterExpression(),
           carbonTable.getDimensionByTableName(factTableName),
           carbonTable.getMeasureByTableName(factTableName));
     }
@@ -224,7 +224,7 @@ public class QueryModel implements Serializable {
     executorModel.setDimAggregationInfo(dimensionAggregatorInfos);
   }
 
-  private static void traverseAndSetDimensionOrMsrTypeForColumnExpressions(
+  public static void processFilterExpression(
       Expression filterExpression, List<CarbonDimension> dimensions, List<CarbonMeasure> measures) {
     if (null != filterExpression) {
       if (null != filterExpression.getChildren() && filterExpression.getChildren().size() == 0) {
@@ -248,7 +248,7 @@ public class QueryModel implements Serializable {
             setDimAndMsrColumnNode(dimensions, measures, col);
           }
         } else {
-          traverseAndSetDimensionOrMsrTypeForColumnExpressions(expression, dimensions, measures);
+          processFilterExpression(expression, dimensions, measures);
         }
       }
     }
@@ -270,7 +270,7 @@ public class QueryModel implements Serializable {
     CarbonMeasure msr;
     String columnName;
     columnName = col.getColumnName();
-    dim = CarbonQueryParseUtil.findDimension(dimensions, columnName);
+    dim = CarbonUtil.findDimension(dimensions, columnName);
     col.setCarbonColumn(dim);
     col.setDimension(dim);
     col.setDimension(true);

@@ -40,14 +40,14 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
   val LOGGER = LogServiceFactory.getLogService("CarbonRawStrategies")
 
   def getStrategies: Seq[Strategy] = {
-    val total = sqlContext.planner.strategies :+ CarbonRawCubeScans
+    val total = sqlContext.planner.strategies :+ CarbonRawTableScan
     total
   }
 
   /**
    * Carbon strategies for Carbon cube scanning
    */
-  private[sql] object CarbonRawCubeScans extends Strategy {
+  private[sql] object CarbonRawTableScan extends Strategy {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = {
       plan match {
@@ -158,7 +158,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
           others.references.map(f => projectExprsNeedToDecode.add(f))
       }
       val projectSet = AttributeSet(projectList.flatMap(_.references))
-      val scan = CarbonRawCubeScan(projectSet.toSeq,
+      val scan = CarbonRawTableScan(projectSet.toSeq,
         relation.carbonRelation,
         predicates,
         groupExprs,
@@ -218,7 +218,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
       // decode them as well.
       val projectExprsNeedToDecode = new java.util.HashSet[Attribute]()
       val projectSet = AttributeSet(projectList.flatMap(_.references))
-      val scan = CarbonRawCubeScan(projectList.map(_.toAttribute),
+      val scan = CarbonRawTableScan(projectList.map(_.toAttribute),
         relation.carbonRelation,
         predicates,
         None,
@@ -249,7 +249,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         sc: SQLContext,
         tableName: String,
         projectExprsNeedToDecode: Seq[Attribute],
-        scan: CarbonRawCubeScan): CarbonDictionaryDecoder = {
+        scan: CarbonRawTableScan): CarbonDictionaryDecoder = {
       val relations = Seq((tableName, relation)).toMap
       val aliasMap = new ArrayBuffer[(String, String)]()
       val attrs = projectExprsNeedToDecode.map { attr =>

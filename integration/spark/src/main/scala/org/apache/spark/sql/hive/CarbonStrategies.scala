@@ -52,14 +52,14 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
   val LOGGER = LogServiceFactory.getLogService("CarbonStrategies")
 
   def getStrategies: Seq[Strategy] = {
-    val total = sqlContext.planner.strategies :+ CarbonCubeScans :+ DDLStrategies
+    val total = sqlContext.planner.strategies :+ CarbonTableScan :+ DDLStrategies
     total
   }
 
   /**
    * Carbon strategies for Carbon cube scanning
    */
-  private[sql] object CarbonCubeScans extends Strategy {
+  private[sql] object CarbonTableScan extends Strategy {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = {
       plan match {
@@ -288,7 +288,7 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
 
       if (!detailQuery) {
         val projectSet = AttributeSet(projectList.flatMap(_.references))
-        CarbonCubeScan(
+        CarbonTableScan(
           projectSet.toSeq,
           relation,
           predicates,
@@ -301,7 +301,7 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
       else {
         val projectSet = AttributeSet(projectList.flatMap(_.references))
         Project(projectList,
-          CarbonCubeScan(projectSet.toSeq,
+          CarbonTableScan(projectSet.toSeq,
             relation,
             predicates,
             groupExprs,
