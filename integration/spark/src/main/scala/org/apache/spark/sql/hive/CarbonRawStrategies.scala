@@ -59,10 +59,8 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
               carbonRelation,
               l,
               None,
-              None,
-              false,
-              true,
-              false)(sqlContext)._1 :: Nil
+              detailQuery = true,
+              useBinaryAggregation = false)(sqlContext)._1 :: Nil
           }
 
         case catalyst.planning.PartialAggregation(
@@ -96,36 +94,24 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
     Seq[SparkPlan] = {
       val (_, _, _, aliases, groupExprs, substitutesortExprs, limitExpr) = extractPlan(plan)
 
-      val s =
-        try { {
-          carbonRawScan(projectList,
-            predicates,
-            carbonRelation,
-            logicalRelation,
-            Some(partialComputation),
-            limitExpr,
-            !groupingExpressions.isEmpty,
-            false,
-            true)(sqlContext)
-        }
-        } catch {
-          case _ => null
-        }
-
-      if (s != null) {
-        if (!s._2) {
-          CarbonAggregate(
-            partial = false,
-            namedGroupingAttributes,
-            rewrittenAggregateExpressions,
-            CarbonRawAggregate(
-              partial = true,
-              groupingExpressions,
-              partialComputation,
-              s._1))(sqlContext) :: Nil
-        } else {
-          Nil
-        }
+      val s = carbonRawScan(projectList,
+          predicates,
+          carbonRelation,
+          logicalRelation,
+          Some(partialComputation),
+          false,
+          true)(sqlContext)
+      // If any aggregate function present on dimnesions then don't use this plan.
+      if (!s._2) {
+        CarbonAggregate(
+          partial = false,
+          namedGroupingAttributes,
+          rewrittenAggregateExpressions,
+          CarbonRawAggregate(
+            partial = true,
+            groupingExpressions,
+            partialComputation,
+            s._1))(sqlContext) :: Nil
       } else {
         Nil
       }
@@ -139,8 +125,6 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         relation: CarbonDatasourceRelation,
         logicalRelation: LogicalRelation,
         groupExprs: Option[Seq[Expression]],
-        limitExpr: Option[Expression],
-        isGroupByPresent: Boolean,
         detailQuery: Boolean,
         useBinaryAggregation: Boolean)(sc: SQLContext): (SparkPlan, Boolean) = {
 
@@ -160,10 +144,6 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         relation.carbonRelation,
         predicates,
         groupExprs,
-        None,
-        limitExpr,
-        isGroupByPresent,
-        detailQuery,
         useBinaryAggregation)(sqlContext)
       val dimAggrsPresence: Boolean = scan.buildCarbonPlan.getDimAggregatorInfos.size() > 0
       projectExprsNeedToDecode.addAll(scan.attributesNeedToDecode)
@@ -220,10 +200,6 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         relation.carbonRelation,
         predicates,
         None,
-        None,
-        None,
-        false,
-        true,
         false)(sqlContext)
       projectExprsNeedToDecode.addAll(scan.attributesNeedToDecode)
       if (projectExprsNeedToDecode.size() > 0) {

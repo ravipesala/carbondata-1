@@ -93,6 +93,15 @@ case class CarbonRawAggregate(
     }
   }.toArray
 
+  val order = aggregateExpressions.flatMap { agg =>
+    agg.collect {
+      case a: Expression =>
+        BindReferences.bindReference(a, child.output).collect {
+          case b: BoundReference => b.ordinal
+        }
+    }.flatMap(f => f)
+  }.toArray
+
   /** The schema of the result of all aggregate evaluations */
   private[this] val computedSchema = computedAggregates.map(_.resultAttribute)
 
@@ -134,13 +143,20 @@ case class CarbonRawAggregate(
     attachTree(this, "execute") {
       val numInputRows = longMetric("numInputRows")
       val numOutputRows = longMetric("numOutputRows")
+      val pOrder = order.zipWithIndex.map {f =>
+        if(f._2 > 0 && order(f._2-1) == f._1) {
+          f._1 + 1
+        } else {
+          f._1
+        }
+      }
       if (groupingExpressions.isEmpty) {
         child.execute().mapPartitions { iter =>
           val buffer = newAggregateBuffer()
           var currentRow: CarbonRawMutableRow = null
           while (iter.hasNext) {
             currentRow = iter.next().asInstanceOf[CarbonRawMutableRow]
-            while (currentRow.hasNext()) {
+            while (currentRow.hasNext) {
               numInputRows += 1
               var i = 0
               while (i < buffer.length) {
@@ -165,13 +181,10 @@ case class CarbonRawAggregate(
       } else {
         child.execute().mapPartitions { iter =>
           val hashTable = new HashMap[ByteArrayWrapper, Array[AggregateFunction1]](10000)
-          val groupingProjection = new InterpretedMutableProjection(groupingExpressions,
-            child.output)
-
           var currentRow: CarbonRawMutableRow = null
           while (iter.hasNext) {
             currentRow = iter.next().asInstanceOf[CarbonRawMutableRow]
-            while (currentRow.hasNext()) {
+            while (currentRow.hasNext) {
               numInputRows += 1
               val currentGroup = currentRow.getKey
               var currentBuffer = hashTable.get(currentGroup)
@@ -191,11 +204,7 @@ case class CarbonRawAggregate(
 
           new Iterator[InternalRow] {
             private[this] val hashTableIter = hashTable.entrySet().iterator()
-            private[this] val aggregateResults = new Array[Any]((computedAggregates.length))
-            private[this] val resultProjection =
-              new InterpretedMutableProjection(
-                resultExpressions, computedSchema ++ namedGroups.map(_._2))
-            private[this] val joinedRow = new JoinedRow
+            private[this] val aggregateResults = new Array[Any](computedAggregates.length)
 
             override final def hasNext: Boolean = hashTableIter.hasNext
 
@@ -211,9 +220,9 @@ case class CarbonRawAggregate(
                 aggregateResults(i) = currentBuffer(i).eval(EmptyRow)
                 i += 1
               }
-              new GenericMutableRow(currentRow
-                                    .parseKey(currentGroup,
-                                      aggregateResults.asInstanceOf[Array[Object]]).map(toType))
+              new GenericMutableRow(
+                currentRow.parseKey(
+                  currentGroup,aggregateResults.asInstanceOf[Array[Object]], pOrder).map(toType))
             }
           }
         }

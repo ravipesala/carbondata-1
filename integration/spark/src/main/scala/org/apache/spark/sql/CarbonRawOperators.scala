@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql
 
+import java.util
+import java.util.ArrayList
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
@@ -24,180 +27,121 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.LeafNode
+import org.apache.spark.sql.hive.CarbonMetastoreCatalog
 import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.types.UTF8String
 
+import org.carbondata.core.carbon.metadata.schema.table.column.{CarbonDimension, CarbonMeasure}
 import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier}
 import org.carbondata.core.constants.CarbonCommonConstants
+import org.carbondata.core.util.CarbonProperties
 import org.carbondata.query.carbon.model._
 import org.carbondata.query.carbon.result.BatchRawResult
 import org.carbondata.query.carbon.wrappers.ByteArrayWrapper
-import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression}
-import org.carbondata.spark.{CarbonFilters, RawKeyVal, RawKeyValImpl}
 import org.carbondata.spark.rdd.CarbonRawQueryRDD
+import org.carbondata.spark.{CarbonFilters, RawKeyVal, RawKeyValImpl}
 
 
-case class CarbonRawTableScan(var attributesRaw: Seq[Attribute],
+case class CarbonRawTableScan(
+    var attributesRaw: Seq[Attribute],
     relationRaw: CarbonRelation,
     dimensionPredicatesRaw: Seq[Expression],
     aggExprsRaw: Option[Seq[Expression]],
-    sortExprsRaw: Option[Seq[SortOrder]],
-    limitExprRaw: Option[Expression],
-    isGroupByPresentRaw: Boolean,
-    detailQueryRaw: Boolean = false,
-    useBinaryAggregator: Boolean)(@transient val ocRaw: SQLContext)
-  extends AbstractTableScan(attributesRaw,
-    relationRaw,
-    dimensionPredicatesRaw,
-    aggExprsRaw,
-    sortExprsRaw,
-    limitExprRaw,
-    isGroupByPresentRaw,
-    detailQueryRaw)(ocRaw) {
+    useBinaryAggregator: Boolean)(@transient val ocRaw: SQLContext) extends LeafNode
+{
+  val carbonTable = relationRaw.metaData.carbonTable
+  val selectedDims = scala.collection.mutable.MutableList[QueryDimension]()
+  val selectedMsrs = scala.collection.mutable.MutableList[QueryMeasure]()
+  @transient val carbonCatalog = ocRaw.catalog.asInstanceOf[CarbonMetastoreCatalog]
 
-  override def processAggregateExpr(plan: CarbonQueryPlan, currentAggregate: AggregateExpression1,
-      queryOrder: Int): Int = {
+  val attributesNeedToDecode = new util.HashSet[AttributeReference]()
+  val unprocessedExprs = new ArrayBuffer[Expression]()
 
-    currentAggregate match {
-      case Sum(attr: AttributeReference) =>
-        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-        if (msrs.length > 0) {
-          val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.SUM)
-          m1.setQueryOrder(queryOrder)
-          plan.addMeasure(m1)
-        } else {
-          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-          if (dims.length > 0) {
-            val d1 = new QueryDimension(attr.name)
-            d1.setQueryOrder(queryOrder)
-            plan.addAggDimAggInfo(d1.getColumnName, "sum", d1.getQueryOrder)
-          }
-        }
-        queryOrder + 1
+  val buildCarbonPlan: CarbonQueryPlan = {
+    val plan: CarbonQueryPlan = new CarbonQueryPlan(relationRaw.schemaName, relationRaw.tableName)
 
-      case Count(attr: AttributeReference) =>
-        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-        if (msrs.length > 0) {
-          val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.SUM)
-          m1.setQueryOrder(queryOrder)
-          plan.addMeasure(m1)
-        } else {
-          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-          if (dims.length > 0) {
-            val d1 = new QueryDimension(attr.name)
-            d1.setQueryOrder(queryOrder)
-            plan.addAggDimAggInfo(d1.getColumnName, "count", d1.getQueryOrder)
-          }
+    val dimensions = carbonTable.getDimensionByTableName(carbonTable.getFactTableName)
+    val measures = carbonTable.getMeasureByTableName(carbonTable.getFactTableName)
+    val dimAttr = new Array[Attribute](dimensions.size())
+    val msrAttr = new Array[Attribute](measures.size())
+    attributesRaw.map { attr =>
+      val carbonDimension =
+        carbonTable.getDimensionByName(carbonTable.getFactTableName, attr.name)
+      if(carbonDimension != null) {
+        dimAttr(dimensions.indexOf(carbonDimension)) = attr
+      } else {
+        val carbonMeasure =
+          carbonTable.getMeasureByName(carbonTable.getFactTableName, attr.name)
+        if(carbonMeasure != null) {
+          msrAttr(measures.indexOf(carbonMeasure)) = attr
         }
-        queryOrder + 1
-      case Count(Literal(star, _)) =>
-        val m1 = new QueryMeasure("count(*)")
-        m1.setAggregateFunction(CarbonCommonConstants.COUNT)
-        m1.setQueryOrder(queryOrder)
-        plan.addMeasure(m1)
-        plan.setCountStartQuery(true)
-        queryOrder + 1
-      case CountDistinct(attr: AttributeReference) =>
-        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-        if (msrs.length > 0) {
-          val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.SUM)
-          m1.setQueryOrder(queryOrder)
-          plan.addMeasure(m1)
-        } else {
-          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-          if (dims.length > 0) {
-            val d1 = new QueryDimension(attr.name)
-            d1.setQueryOrder(queryOrder)
-            plan.addAggDimAggInfo(d1.getColumnName, "distinct-count", d1.getQueryOrder)
-          }
-        }
-        queryOrder + 1
-
-      case Average(attr: AttributeReference) =>
-        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-        if (msrs.length > 0) {
-          val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.SUM)
-          m1.setQueryOrder(queryOrder)
-          plan.addMeasure(m1)
-        } else {
-          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-          if (dims.length > 0) {
-            val d1 = new QueryDimension(attr.name)
-            d1.setQueryOrder(queryOrder)
-            plan.addAggDimAggInfo(d1.getColumnName, "avg", d1.getQueryOrder)
-          }
-        }
-        queryOrder + 1
-
-      case Min(attr: AttributeReference) =>
-        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-        if (msrs.length > 0) {
-          val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.SUM)
-          m1.setQueryOrder(queryOrder)
-          plan.addMeasure(m1)
-        } else {
-          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-          if (dims != null) {
-            val d1 = new QueryDimension(attr.name)
-            d1.setQueryOrder(queryOrder)
-            plan.addAggDimAggInfo(d1.getColumnName, "min", d1.getQueryOrder)
-          }
-        }
-        queryOrder + 1
-
-      case Max(attr: AttributeReference) =>
-        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-        if (msrs.length > 0) {
-          val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.SUM)
-          m1.setQueryOrder(queryOrder)
-          plan.addMeasure(m1)
-        } else {
-          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-          if (dims.length > 0) {
-            val d1 = new QueryDimension(attr.name)
-            d1.setQueryOrder(queryOrder)
-            plan.addAggDimAggInfo(d1.getColumnName, "max", d1.getQueryOrder)
-          }
-        }
-        queryOrder + 1
-
-      case SumDistinct(attr: AttributeReference) =>
-        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-        if (msrs.length > 0) {
-          val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.SUM)
-          m1.setQueryOrder(queryOrder)
-          plan.addMeasure(m1)
-        } else {
-          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-          if (dims != null) {
-            //            plan.removeDimensionFromDimList(dims(0));
-            val d1 = new QueryDimension(attr.name)
-            d1.setQueryOrder(queryOrder)
-            plan.addAggDimAggInfo(d1.getColumnName, "sum-distinct", queryOrder)
-          }
-        }
-        queryOrder + 1
-      case _ => throw new
-          Exception("Some Aggregate functions cannot be pushed, force to detailequery")
+      }
     }
+
+    attributesRaw = (dimAttr.filter(f => f != null)) ++ (msrAttr.filter(f => f != null))
+
+    var queryOrder: Integer = 0
+    attributesRaw.map { attr =>
+        val carbonDimension =
+          carbonTable.getDimensionByName(carbonTable.getFactTableName, attr.name)
+        if (carbonDimension != null) {
+          val dim = new QueryDimension(attr.name)
+          dim.setQueryOrder(queryOrder)
+          queryOrder = queryOrder + 1
+          selectedDims += dim
+        } else {
+          val carbonMeasure =
+            carbonTable.getMeasureByName(carbonTable.getFactTableName, attr.name)
+          if (carbonMeasure != null) {
+            val m1 = new QueryMeasure(attr.name)
+            m1.setQueryOrder(queryOrder)
+            queryOrder = queryOrder + 1
+            selectedMsrs += m1
+          }
+        }
+      }
+    //Just find out that any aggregation functions are present on dimensions.
+    aggExprsRaw match {
+      case Some(aggExprs) =>
+        aggExprs.foreach {
+          case Alias(agg: AggregateExpression1, name) =>
+            agg.collect {
+              case attr: AttributeReference =>
+                val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+                if(dims.nonEmpty) {
+                  plan.addAggDimAggInfo(dims.head.getColumnName,
+                    dims.head.getAggregateFunction,
+                    dims.head.getQueryOrder)
+                }
+            }
+          case _ =>
+        }
+      case _ =>
+    }
+
+    // Fill the selected dimensions & measures obtained from
+    // attributes to query plan  for detailed query
+    selectedDims.foreach(plan.addDimension)
+    selectedMsrs.foreach(plan.addMeasure)
+
+    plan.setSortedDimemsions(new ArrayList[QueryDimension])
+
+    plan.setRawDetailQuery(true)
+    plan.setOutLocationPath(
+      CarbonProperties.getInstance().getProperty(CarbonCommonConstants.STORE_LOCATION_HDFS))
+    plan.setQueryId(System.nanoTime() + "")
+    processFilterExpressions(plan)
+    plan
   }
 
-  override def processFilterExpressions(plan: CarbonQueryPlan) {
-    if (!dimensionPredicatesRaw.isEmpty) {
+  def processFilterExpressions(plan: CarbonQueryPlan) {
+    if (dimensionPredicatesRaw.nonEmpty) {
       val expressionVal = CarbonFilters
         .processExpression(dimensionPredicatesRaw, attributesNeedToDecode, unprocessedExprs)
       expressionVal match {
         case Some(ce) =>
           // adding dimension used in expression in querystats
-          ce.getChildren.asScala.filter { x => x.isInstanceOf[CarbonColumnExpression] }
-            .map { y => allDims += y.asInstanceOf[CarbonColumnExpression].getColumnName }
           plan.setFilterExpression(ce)
         case _ =>
       }
@@ -213,7 +157,7 @@ case class CarbonRawTableScan(var attributesRaw: Seq[Attribute],
         val dims = plan.getDimensions.asScala.filter(f => f.getColumnName.equals(attr.name))
         val msrs = plan.getMeasures.asScala.filter(f => f.getColumnName.equals(attr.name))
         var order = plan.getDimensions.size() + plan.getMeasures.size()
-        if (dims.size == 0 && msrs.size == 0) {
+        if (dims.isEmpty && msrs.isEmpty) {
           val dimension = carbonTable.getDimensionByName(carbonTable.getFactTableName, attr.name)
           if (dimension != null) {
             val qDim = new QueryDimension(dimension.getColName)
@@ -240,30 +184,24 @@ case class CarbonRawTableScan(var attributesRaw: Seq[Attribute],
 
   def inputRdd: CarbonRawQueryRDD[BatchRawResult, Any] = {
 
-    val conf = new Configuration();
+    val conf = new Configuration()
     val absoluteTableIdentifier =
       new AbsoluteTableIdentifier(carbonCatalog.storePath,
         new CarbonTableIdentifier(carbonTable.getDatabaseName,
           carbonTable.getFactTableName))
-
+    buildCarbonPlan.getDimAggregatorInfos.clear()
     val model = QueryModel.createModel(
       absoluteTableIdentifier, buildCarbonPlan, carbonTable)
-    model.setForcedDetailRawQuery(true)
-    model.setDetailQuery(false)
     val kv: RawKeyVal[BatchRawResult, Any] = new RawKeyValImpl()
     // setting queryid
-    buildCarbonPlan.setQueryId(oc.getConf("queryId", System.nanoTime() + ""))
-    // scalastyle:off println
-    println("Selected Table to Query ****** "
-            + model.getAbsoluteTableIdentifier.getCarbonTableIdentifier.getTableName())
-    // scalastyle:on println
+    buildCarbonPlan.setQueryId(ocRaw.getConf("queryId", System.nanoTime() + ""))
 
     val cubeCreationTime = carbonCatalog
-      .getCubeCreationTime(relationRaw.schemaName, cubeName)
+      .getCubeCreationTime(relationRaw.schemaName, relationRaw.tableName)
     val schemaLastUpdatedTime = carbonCatalog
-      .getSchemaLastUpdatedTime(relationRaw.schemaName, cubeName)
+      .getSchemaLastUpdatedTime(relationRaw.schemaName, relationRaw.tableName)
     val big = new CarbonRawQueryRDD(
-      oc.sparkContext,
+      ocRaw.sparkContext,
       model,
       buildCarbonPlan.getFilterExpression,
       kv,
@@ -298,32 +236,33 @@ case class CarbonRawTableScan(var attributesRaw: Seq[Attribute],
     }
   }
 
-  override def output: Seq[Attribute] = {
+  def output: Seq[Attribute] = {
     attributesRaw
   }
+
 }
 
 class CarbonRawMutableRow(values: Array[Array[Object]],
     val schema: QuerySchemaInfo) extends GenericMutableRow(values.asInstanceOf[Array[Any]]) {
 
-  val dimsLen = schema.getQueryDimensions.length - 1;
+  val dimsLen = schema.getQueryDimensions.length - 1
   val order = schema.getQueryOrder
-  var counter = 0;
+  var counter = 0
   val size = {
-    if (values.size > 0) {
-      values(0).length
+    if (values.nonEmpty) {
+      values.head.length
     } else {
       0
     }
   }
 
-  def getKey(): ByteArrayWrapper = values(0)(counter).asInstanceOf[ByteArrayWrapper]
+  def getKey: ByteArrayWrapper = values.head(counter).asInstanceOf[ByteArrayWrapper]
 
-  def parseKey(key: ByteArrayWrapper, aggData: Array[Object]): Array[Object] = {
-    BatchRawResult.parseData(key, aggData, schema);
+  def parseKey(key: ByteArrayWrapper, aggData: Array[Object], order: Array[Int]): Array[Object] = {
+    BatchRawResult.parseData(key, aggData, schema, order)
   }
 
-  def hasNext(): Boolean = {
+  def hasNext: Boolean = {
     counter < size
   }
 
