@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.{Filter, Project, SparkPlan}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 
 import org.carbondata.common.logging.LogServiceFactory
+import org.carbondata.core.carbon.metadata.schema.table.CarbonTable
 
 class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
 
@@ -93,25 +94,30 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         rewrittenAggregateExpressions: Seq[NamedExpression]):
     Seq[SparkPlan] = {
       val (_, _, _, aliases, groupExprs, substitutesortExprs, limitExpr) = extractPlan(plan)
-
-      val s = carbonRawScan(projectList,
+      val groupByPresentOnMsr = isGroupByPresentOnMeasures(groupingExpressions,
+        carbonRelation.carbonRelation.metaData.carbonTable)
+      if(!groupByPresentOnMsr) {
+        val s = carbonRawScan(projectList,
           predicates,
           carbonRelation,
           logicalRelation,
           Some(partialComputation),
           false,
           true)(sqlContext)
-      // If any aggregate function present on dimnesions then don't use this plan.
-      if (!s._2) {
-        CarbonAggregate(
-          partial = false,
-          namedGroupingAttributes,
-          rewrittenAggregateExpressions,
-          CarbonRawAggregate(
-            partial = true,
-            groupingExpressions,
-            partialComputation,
-            s._1))(sqlContext) :: Nil
+        // If any aggregate function present on dimnesions then don't use this plan.
+        if (!s._2) {
+          CarbonAggregate(
+            partial = false,
+            namedGroupingAttributes,
+            rewrittenAggregateExpressions,
+            CarbonRawAggregate(
+              partial = true,
+              groupingExpressions,
+              partialComputation,
+              s._1))(sqlContext) :: Nil
+        } else {
+          Nil
+        }
       } else {
         Nil
       }
@@ -264,6 +270,19 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         case LogicalRelation(carbonRelation: CarbonDatasourceRelation, _) => true
         case _ => false
       }
+    }
+
+    private def isGroupByPresentOnMeasures(groupingExpressions: Seq[Expression],
+        carbonTable: CarbonTable): Boolean = {
+      groupingExpressions.map { g =>
+       g.collect {
+         case attr: AttributeReference =>
+           if(carbonTable.getMeasureByName(carbonTable.getFactTableName, attr.name) != null) {
+             return true
+           }
+       }
+      }
+      false
     }
   }
 

@@ -45,7 +45,7 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
     val executedPlan: LogicalPlan = optimizer.execute(plan)
     if (!conf.asInstanceOf[CarbonSQLConf].pushComputation) {
       val relations = collectCarbonRelation(plan)
-      if(relations.size > 0) {
+      if (relations.nonEmpty) {
         new ResolveCarbonFunctions(relations)(executedPlan)
       } else {
         executedPlan
@@ -68,46 +68,56 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
     /**
      * Steps for changing the plan.
      * 1. It finds out the join condition columns and dimension aggregate columns which are need to
-     *    be decoded just before that plan executes.
+     * be decoded just before that plan executes.
      * 2. Plan starts transform by adding the decoder to the plan where it needs the decoded data
-     *    like dimension aggregate columns decoder under aggregator and join condition decoder under
-     *    join children.
-     *
-     * @param plan
-     * @param relations
-     * @return
+     * like dimension aggregate columns decoder under aggregator and join condition decoder under
+     * join children.
      */
     def transformCarbonPlan(plan: LogicalPlan,
-      relations: Map[String, CarbonDatasourceRelation]): LogicalPlan = {
+        relations: Map[String, CarbonDatasourceRelation]): LogicalPlan = {
       var decoder = false
       val attrsOnJoin = new util.HashSet[AttributeReference]
       val attrsOndimAggs = new util.HashSet[AttributeReference]
       val attrsOnConds = new util.HashSet[AttributeReference]
+      val attrsOnSort = new util.HashSet[AttributeReference]
       val aliasMap = new util.HashMap[String, String]()
-      collectInformationOnAttributes(plan, attrsOnJoin, attrsOndimAggs, attrsOnConds, aliasMap)
+      collectInformationOnAttributes(plan, attrsOnJoin, attrsOndimAggs,
+        attrsOnConds, attrsOnSort, aliasMap)
       val allAttrsNotDecode = new util.HashSet[AttributeReference]
       allAttrsNotDecode.addAll(attrsOndimAggs)
       allAttrsNotDecode.addAll(attrsOnJoin)
       allAttrsNotDecode.addAll(attrsOnConds)
+      allAttrsNotDecode.addAll(attrsOnSort)
       val transFormedPlan =
         plan transformDown {
           case cd: CarbonDictionaryCatalystDecoder =>
             decoder = true
             cd
-          case sort: Sort =>
+          case sort: Sort if !sort.child.isInstanceOf[CarbonDictionaryCatalystDecoder] =>
             val sortExprs = sort.order.map { s =>
               s.transform {
                 case attr: AttributeReference =>
                   updateDataType(attr, relations, allAttrsNotDecode, aliasMap)
               }.asInstanceOf[SortOrder]
             }
+            var child = sort.child
+            if (attrsOnSort.size() > 0 && !child.isInstanceOf[Sort]) {
+              val sortAggs = attrsOnSort.asScala
+                .filterNot(attr => (attrsOnJoin.contains(attr) || attrsOndimAggs.contains(attr)))
+              sortAggs.map(allAttrsNotDecode.remove)
+              if (sortAggs.nonEmpty) {
+                child = CarbonDictionaryCatalystDecoder(relations,
+                  IncludeProfile(sortAggs.toSeq), Map(),
+                  sort.child)
+              }
+            }
             if (!decoder) {
               decoder = true
               CarbonDictionaryCatalystDecoder(relations,
                 IncludeProfile(Seq()), Map(),
-                Sort(sortExprs, sort.global, sort.child))
+                Sort(sortExprs, sort.global, child))
             } else {
-              Sort(sortExprs, sort.global, sort.child)
+              Sort(sortExprs, sort.global, child)
             }
           case agg: Aggregate if !agg.child.isInstanceOf[CarbonDictionaryCatalystDecoder] =>
             val aggExps = agg.aggregateExpressions.map { aggExp =>
@@ -128,9 +138,9 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
             if (attrsOndimAggs.size() > 0 && !child.isInstanceOf[Aggregate]) {
               // Filter out already decoded attr during join operation
               val filteredAggs = attrsOndimAggs.asScala
-                                 .filterNot(attr => attrsOnJoin.contains(attr))
+                .filterNot(attr => attrsOnJoin.contains(attr))
               filteredAggs.map(allAttrsNotDecode.remove)
-              if (filteredAggs.size > 0) {
+              if (filteredAggs.nonEmpty) {
                 child = CarbonDictionaryCatalystDecoder(relations,
                   IncludeProfile(filteredAggs.toSeq), Map(),
                   agg.child)
@@ -160,14 +170,14 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
             }
           case j: Join
             if !(j.left.isInstanceOf[CarbonDictionaryCatalystDecoder] ||
-              j.right.isInstanceOf[CarbonDictionaryCatalystDecoder]) =>
+                 j.right.isInstanceOf[CarbonDictionaryCatalystDecoder]) =>
 
             val leftCondAttrs = new ArrayBuffer[AttributeReference]
             val rightCondAttrs = new ArrayBuffer[AttributeReference]
             if (attrsOnJoin.size() > 0) {
               attrsOnJoin.asScala.map(allAttrsNotDecode.remove)
               attrsOnJoin.asScala.map { attr =>
-                if (qualifierPresence(j.left, attr.qualifiers(0))) {
+                if (qualifierPresence(j.left, attr.qualifiers.head)) {
                   leftCondAttrs += attr
                 } else {
                   rightCondAttrs += attr
@@ -175,14 +185,14 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
               }
               var leftPlan = j.left
               var rightPlan = j.right
-              if (leftCondAttrs.size > 0) {
+              if (leftCondAttrs.nonEmpty) {
                 leftPlan = CarbonDictionaryCatalystDecoder(relations,
                   IncludeProfile(leftCondAttrs),
                   Map(),
                   j.left)
               }
-              if (rightCondAttrs.size > 0 &&
-                !rightPlan.isInstanceOf[CarbonDictionaryCatalystDecoder]) {
+              if (rightCondAttrs.nonEmpty &&
+                  !rightPlan.isInstanceOf[CarbonDictionaryCatalystDecoder]) {
                 rightPlan = CarbonDictionaryCatalystDecoder(relations,
                   IncludeProfile(rightCondAttrs), Map(),
                   j.right)
@@ -198,14 +208,14 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
             } else {
               j
             }
-          case p: Project if relations.size > 0 =>
+          case p: Project if relations.nonEmpty =>
             val prExps = p.projectList.map { prExp =>
               prExp.transform {
                 case attr: AttributeReference =>
                   updateDataType(attr, relations, allAttrsNotDecode, aliasMap)
                 case alias@Alias(attr: Attribute, name: String)
                   if aliasMap.get(attr.exprId.id.toString) == null =>
-                  aliasMap.put(attr.exprId.id.toString, attr.qualifiers(0))
+                  aliasMap.put(attr.exprId.id.toString, attr.qualifiers.head)
                   alias
               }
             }.asInstanceOf[Seq[NamedExpression]]
@@ -231,12 +241,13 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
         }
       attrsOnJoin.addAll(attrsOndimAggs)
       attrsOnJoin.addAll(attrsOnConds)
+      attrsOnJoin.addAll(attrsOnSort)
       // It means join is present in the plan.
       // transform the plan again to exclude the already decoded dictionary values
       transFormedPlan transform {
         case cd: CarbonDictionaryCatalystDecoder =>
           cd.profile match {
-            case ip: IncludeProfile if ip.attributes.size == 0 && attrsOnJoin.size() > 0 =>
+            case ip: IncludeProfile if ip.attributes.isEmpty && attrsOnJoin.size() > 0 =>
               CarbonDictionaryCatalystDecoder(relations,
                 ExcludeProfile(attrsOnJoin.asScala.toSeq),
                 aliasMap.asScala.toMap,
@@ -251,13 +262,14 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
     }
 
     private def collectInformationOnAttributes(plan: LogicalPlan,
-      attrsOnJoin: util.HashSet[AttributeReference],
-      attrsOndimAggs: util.HashSet[AttributeReference],
-      attrsOnConds: util.HashSet[AttributeReference],
-      aliasMap: util.HashMap[String, String]) {
+        attrsOnJoin: util.HashSet[AttributeReference],
+        attrsOndimAggs: util.HashSet[AttributeReference],
+        attrsOnConds: util.HashSet[AttributeReference],
+        attrsOnSort: util.HashSet[AttributeReference],
+        aliasMap: util.HashMap[String, String]) {
 
       plan transformUp {
-        case po@ PhysicalOperation(projectList, predicates,
+        case po@PhysicalOperation(projectList, predicates,
         l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)) =>
           collectProjectsAndConditions(po)
           po
@@ -274,12 +286,20 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
           j.condition match {
             case Some(expression) =>
               expression.collect {
-                case attr: AttributeReference if isDictionaryEncoded(attr, relations) =>
+                case attr: AttributeReference if isDictionaryEncoded(attr, relations, aliasMap) =>
                   attrsOnJoin.add(attr)
               }
             case _ =>
           }
           j
+        case sort: Sort =>
+          sort.order.map { s =>
+            s.collect {
+              case attr: AttributeReference if isDictionaryEncoded(attr, relations, aliasMap) =>
+                attrsOnSort.add(attr)
+            }
+          }
+          sort
       }
 
       def collectProjectsAndConditions(plan: LogicalPlan): Unit = {
@@ -300,23 +320,20 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
       }
 
       def collectProjectAndConditions(projectList: Seq[NamedExpression],
-        condition: Seq[Expression],
-        carbonRelation: CarbonDatasourceRelation) {
+          condition: Seq[Expression],
+          carbonRelation: CarbonDatasourceRelation) {
 
-        projectList.map { p =>
-          p match {
-            case attr: AttributeReference =>
-            case Alias(attr: AttributeReference, _) =>
-            case others =>
-              others.collect {
-                case attr: AttributeReference =>
-                  carbonRelation.carbonRelation.metaData.dictionaryMap.get(attr.name) match {
-                    case Some(true) => attrsOnConds.add(attr)
-                    case _ =>
-                  }
-
-              }
-          }
+        projectList.map {
+          case attr: AttributeReference =>
+          case Alias(attr: AttributeReference, _) =>
+          case others =>
+            others.collect {
+              case attr: AttributeReference =>
+                carbonRelation.carbonRelation.metaData.dictionaryMap.get(attr.name) match {
+                  case Some(true) => attrsOnConds.add(attr)
+                  case _ =>
+                }
+            }
         }
         CarbonFilters.selectFilters(condition, attrsOnConds)
       }
@@ -324,14 +341,14 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
 
     // Collect aggregates on dimensions so that we can add decoder to it.
     private def collectDimensionAggregates(aggExp: AggregateExpression,
-      attrsOndimAggs: util.HashSet[AttributeReference],
-      aliasMap: util.HashMap[String, String]) {
+        attrsOndimAggs: util.HashSet[AttributeReference],
+        aliasMap: util.HashMap[String, String]) {
       aggExp collect {
         case attr: AttributeReference =>
           var qualifier: String = null
-          if (attr.qualifiers.size > 0) {
-            relations.get(attr.qualifiers(0)) match {
-              case Some(relation) => qualifier = attr.qualifiers(0)
+          if (attr.qualifiers.nonEmpty) {
+            relations.get(attr.qualifiers.head) match {
+              case Some(relation) => qualifier = attr.qualifiers.head
               case _ => qualifier = aliasMap.get(attr.exprId.id.toString)
             }
           } else {
@@ -356,14 +373,11 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
      * Update the attribute datatype with [IntegerType] if the carbon column is encoded with
      * dictionary.
      *
-     * @param attr
-     * @param relations
-     * @return
      */
     private def updateDataType(attr: AttributeReference,
-      relations: Map[String, CarbonDatasourceRelation],
-      allAttrsNotDecode: util.HashSet[AttributeReference],
-      aliasMap: util.HashMap[String, String]) = {
+        relations: Map[String, CarbonDatasourceRelation],
+        allAttrsNotDecode: util.HashSet[AttributeReference],
+        aliasMap: util.HashMap[String, String]) = {
       relations.get(aliasMap.get(attr.exprId.id.toString)) match {
         case Some(cd: CarbonDatasourceRelation) =>
           cd.carbonRelation.metaData.dictionaryMap.get(attr.name) match {
@@ -379,8 +393,20 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
     }
 
     private def isDictionaryEncoded(attr: AttributeReference,
-      relations: Map[String, CarbonDatasourceRelation]): Boolean = {
-      relations.get(attr.qualifiers(0)) match {
+        relations: Map[String, CarbonDatasourceRelation],
+        aliasMap: util.HashMap[String, String]): Boolean = {
+
+      var qualifier: String = null
+      if (attr.qualifiers.nonEmpty) {
+        relations.get(attr.qualifiers.head) match {
+          case Some(relation) => qualifier = attr.qualifiers.head
+          case _ => qualifier = aliasMap.get(attr.exprId.id.toString)
+        }
+      } else {
+        qualifier = aliasMap.get(attr.exprId.id.toString)
+      }
+
+      relations.get(qualifier) match {
         case Some(cd: CarbonDatasourceRelation) =>
           cd.carbonRelation.metaData.dictionaryMap.get(attr.name) match {
             case Some(true) => true
@@ -392,10 +418,10 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
 
     def qualifierPresence(plan: LogicalPlan, qualifier: String): Boolean = {
       var present = false
-      val relations = plan collect {
+      plan collect {
         case Project(projectList, child) =>
-          projectList.asInstanceOf[Seq[AttributeReference]].map { attr =>
-            attr.qualifiers.map { qual =>
+          projectList.asInstanceOf[Seq[AttributeReference]].foreach { attr =>
+            attr.qualifiers.foreach { qual =>
               if (qual.equals(qualifier)) {
                 present = true
               }
