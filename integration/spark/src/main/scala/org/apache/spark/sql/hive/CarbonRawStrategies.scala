@@ -74,8 +74,12 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
           handleRawAggregation(plan, plan, projectList, predicates, carbonRelation,
             l, partialComputation, groupingExpressions, namedGroupingAttributes,
             rewrittenAggregateExpressions)
-        case CarbonDictionaryCatalystDecoder(relations, profile, aliasMap, child) =>
-          CarbonDictionaryDecoder(relations, profile, aliasMap, planLater(child))(sqlContext) :: Nil
+        case CarbonDictionaryCatalystDecoder(relations, profile, attrToRltnMap, aliasMap, child) =>
+          CarbonDictionaryDecoder(relations,
+            profile,
+            attrToRltnMap,
+            aliasMap,
+            planLater(child))(sqlContext) :: Nil
         case _ =>
           Nil
       }
@@ -240,7 +244,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
           attr.metadata)(attr.exprId, Seq(tableName))
       }
       val decoder =
-        CarbonDictionaryDecoder(relations, IncludeProfile(attrs), aliasMap.toMap, scan)(sc)
+        CarbonDictionaryDecoder(relations, IncludeProfile(attrs), aliasMap.toMap, Map(), scan)(sc)
       decoder
     }
 

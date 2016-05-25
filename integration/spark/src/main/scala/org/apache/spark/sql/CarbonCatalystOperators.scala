@@ -172,10 +172,11 @@ case class DescribeFormattedCommand(sql: String, tblIdentifier: Seq[String])
 }
 
 case class CarbonDictionaryCatalystDecoder(
-  relations: Map[String, CarbonDatasourceRelation],
-  profile: CarbonProfile,
-  aliasMap: Map[String, String],
-  child: LogicalPlan) extends UnaryNode {
+    relations: Map[String, CarbonDatasourceRelation],
+    profile: CarbonProfile,
+    attrToRltnMap: Map[String, String],
+    aliasMap: Map[String, Attribute],
+    child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
