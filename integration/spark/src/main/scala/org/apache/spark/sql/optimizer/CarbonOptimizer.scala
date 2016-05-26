@@ -104,9 +104,9 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
             var child = sort.child
             if (attrsOnSort.size() > 0 && !child.isInstanceOf[Sort]) {
               val sortAggs = attrsOnSort.asScala
-                .filterNot(attr => (attrsOnJoin.contains(attr) ||
+                .filterNot(attr => attrsOnJoin.contains(attr) ||
                                     attrsOndimAggs.contains(attr) ||
-                                    attrsOnConds.contains(attr)))
+                                    attrsOnConds.contains(attr))
               sortAggs.map(allAttrsNotDecode.remove)
               if (sortAggs.nonEmpty) {
                 child = CarbonDictionaryCatalystDecoder(relations,
@@ -141,7 +141,7 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
             if (attrsOndimAggs.size() > 0 && !child.isInstanceOf[Aggregate]) {
               // Filter out already decoded attr during join operation
               val filteredAggs = attrsOndimAggs.asScala
-                .filterNot(attr => (attrsOnJoin.contains(attr) || attrsOnConds.contains(attr)))
+                .filterNot(attr => attrsOnJoin.contains(attr) || attrsOnConds.contains(attr))
               filteredAggs.map(allAttrsNotDecode.remove)
               if (filteredAggs.nonEmpty) {
                 child = CarbonDictionaryCatalystDecoder(relations,
@@ -179,7 +179,7 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
             val rightCondAttrs = new ArrayBuffer[AttributeReference]
             if (attrsOnJoin.size() > 0) {
               val filteredJoin = attrsOnJoin.asScala
-                .filterNot(attr => (attrsOnConds.contains(attr)))
+                .filterNot(attr => attrsOnConds.contains(attr))
               filteredJoin.map(allAttrsNotDecode.remove)
               filteredJoin.map { attr =>
                 if (qualifierPresence(j.left, attr)) {

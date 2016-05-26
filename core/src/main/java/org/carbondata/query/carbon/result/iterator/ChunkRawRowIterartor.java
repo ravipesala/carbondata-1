@@ -3,7 +3,7 @@ package org.carbondata.query.carbon.result.iterator;
 import org.carbondata.core.iterator.CarbonIterator;
 import org.carbondata.query.carbon.result.BatchRawResult;
 
-public class ChunkRawRowIterartor implements CarbonIterator<Object[]> {
+public class ChunkRawRowIterartor extends CarbonIterator<Object[]> {
 
   /**
    * iterator over chunk result

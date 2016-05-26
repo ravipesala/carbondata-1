@@ -134,15 +134,6 @@ private[sql] case class CarbonDatasourceRelation(
   def sqlContext: SQLContext = context
 }
 
-
-/**
- * Represents logical plan for one carbon cube
- */
-case class CarbonRelation(schemaName: String,
-    cubeName: String,
-    metaData: CarbonMetaData,
-    cubeMeta: TableMeta,
-    alias: Option[String])(@transient sqlContext: SQLContext)
 /**
  * Represents logical plan for one carbon cube
  */

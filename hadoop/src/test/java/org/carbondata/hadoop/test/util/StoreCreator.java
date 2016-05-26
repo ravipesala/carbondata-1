@@ -384,10 +384,16 @@ public class StoreCreator {
         new ArrayList<LoadMetadataDetails>());
 
     String segLocation =
-        storeLocation + "/" + schemaName + "/" + "/" + tableName + "/Fact/Part0/Segment_0";
+        storeLocation + "/" + schemaName + "/" + tableName + "/Fact/Part0/Segment_0";
     File file = new File(segLocation);
     File factFile = null;
-    File folder = file.listFiles()[0];
+    File[] folderList = file.listFiles();
+    File folder = null;
+    for (int i = 0; i < folderList.length; i++) {
+      if (folderList[i].isDirectory()) {
+        folder = folderList[i];
+      }
+    }
     if (folder.isDirectory()) {
       File[] files = folder.listFiles();
       for (int i = 0; i < file.length(); i++) {

@@ -61,125 +61,124 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
    */
   private[sql] object CarbonTableScans extends Strategy {
 
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = {
-      plan match {
-        case PhysicalOperation(projectList, predicates,
-        l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)) =>
-          carbonScan(projectList,
-            predicates,
-            carbonRelation.carbonRelation,
-            None,
-            None,
-            None,
-            isGroupByPresent = false,
-            detailQuery = true) :: Nil
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case PhysicalOperation(projectList, predicates,
+      l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)) =>
+        carbonScan(projectList,
+          predicates,
+          carbonRelation.carbonRelation,
+          None,
+          None,
+          None,
+          isGroupByPresent = false,
+          detailQuery = true) :: Nil
 
-        case Limit(IntegerLiteral(limit),
-        Sort(order, _,
-        p@PartialAggregation(namedGroupingAttributes,
-        rewrittenAggregateExpressions,
-        groupingExpressions,
-        partialComputation,
-        PhysicalOperation(
-        projectList,
-        predicates,
-        l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _))))) =>
-          val aggPlan = handleAggregation(plan, p, projectList, predicates, carbonRelation,
-            partialComputation, groupingExpressions, namedGroupingAttributes,
-            rewrittenAggregateExpressions)
-          org.apache.spark.sql.execution.TakeOrderedAndProject(limit,
-            order,
-            None,
-            aggPlan.head) :: Nil
+      case Limit(IntegerLiteral(limit),
+      Sort(order, _,
+      p@PartialAggregation(namedGroupingAttributes,
+      rewrittenAggregateExpressions,
+      groupingExpressions,
+      partialComputation,
+      PhysicalOperation(
+      projectList,
+      predicates,
+      l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _))))) =>
+        val aggPlan = handleAggregation(plan, p, projectList, predicates, carbonRelation,
+          partialComputation, groupingExpressions, namedGroupingAttributes,
+          rewrittenAggregateExpressions)
+        org.apache.spark.sql.execution.TakeOrderedAndProject(limit,
+          order,
+          None,
+          aggPlan.head) :: Nil
 
-        case Limit(IntegerLiteral(limit), p@PartialAggregation(
-        namedGroupingAttributes,
-        rewrittenAggregateExpressions,
-        groupingExpressions,
-        partialComputation,
-        PhysicalOperation(projectList, predicates,
-        l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)))) =>
-          val aggPlan = handleAggregation(plan, p, projectList, predicates, carbonRelation,
-            partialComputation, groupingExpressions, namedGroupingAttributes,
-            rewrittenAggregateExpressions)
-          org.apache.spark.sql.execution.Limit(limit, aggPlan.head) :: Nil
+      case Limit(IntegerLiteral(limit), p@PartialAggregation(
+      namedGroupingAttributes,
+      rewrittenAggregateExpressions,
+      groupingExpressions,
+      partialComputation,
+      PhysicalOperation(projectList, predicates,
+      l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)))) =>
+        val aggPlan = handleAggregation(plan, p, projectList, predicates, carbonRelation,
+          partialComputation, groupingExpressions, namedGroupingAttributes,
+          rewrittenAggregateExpressions)
+        org.apache.spark.sql.execution.Limit(limit, aggPlan.head) :: Nil
 
-        case PartialAggregation(
-        namedGroupingAttributes,
-        rewrittenAggregateExpressions,
-        groupingExpressions,
-        partialComputation,
-        PhysicalOperation(projectList, predicates,
-        l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _))) =>
-          handleAggregation(plan, plan, projectList, predicates, carbonRelation,
-            partialComputation, groupingExpressions, namedGroupingAttributes,
-            rewrittenAggregateExpressions)
+      case PartialAggregation(
+      namedGroupingAttributes,
+      rewrittenAggregateExpressions,
+      groupingExpressions,
+      partialComputation,
+      PhysicalOperation(projectList, predicates,
+      l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _))) =>
+        handleAggregation(plan, plan, projectList, predicates, carbonRelation,
+          partialComputation, groupingExpressions, namedGroupingAttributes,
+          rewrittenAggregateExpressions)
 
-        case Limit(IntegerLiteral(limit),
-        PhysicalOperation(projectList, predicates,
-        l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _))) =>
-          val (_, _, _, _, groupExprs, substitutesortExprs, limitExpr) = extractPlan(plan)
-          val s = carbonScan(projectList, predicates, carbonRelation.carbonRelation, groupExprs,
-            substitutesortExprs, limitExpr, isGroupByPresent = false, detailQuery = true)
-          org.apache.spark.sql.execution.Limit(limit, s) :: Nil
+      case Limit(IntegerLiteral(limit),
+      PhysicalOperation(projectList, predicates,
+      l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _))) =>
+        val (_, _, _, _, groupExprs, substitutesortExprs, limitExpr) = extractPlan(plan)
+        val s = carbonScan(projectList, predicates, carbonRelation.carbonRelation, groupExprs,
+          substitutesortExprs, limitExpr, isGroupByPresent = false, detailQuery = true)
+        org.apache.spark.sql.execution.Limit(limit, s) :: Nil
 
-        case Limit(IntegerLiteral(limit),
-        Sort(order, _,
-        PhysicalOperation(projectList, predicates,
-        l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)))) =>
-          val (_, _, _, _, groupExprs, substitutesortExprs, limitExpr) = extractPlan(plan)
-          val s = carbonScan(projectList, predicates, carbonRelation.carbonRelation, groupExprs,
-            substitutesortExprs, limitExpr, isGroupByPresent = false, detailQuery = true)
-          org.apache.spark.sql.execution.TakeOrderedAndProject(limit,
-            order,
-            None,
-            s) :: Nil
+      case Limit(IntegerLiteral(limit),
+      Sort(order, _,
+      PhysicalOperation(projectList, predicates,
+      l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)))) =>
+        val (_, _, _, _, groupExprs, substitutesortExprs, limitExpr) = extractPlan(plan)
+        val s = carbonScan(projectList, predicates, carbonRelation.carbonRelation, groupExprs,
+          substitutesortExprs, limitExpr, isGroupByPresent = false, detailQuery = true)
+        org.apache.spark.sql.execution.TakeOrderedAndProject(limit,
+          order,
+          None,
+          s) :: Nil
 
-        case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition,
-        PhysicalOperation(projectList, predicates,
-        l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)), right)
-          if canPushDownJoin(right, condition) =>
-          LOGGER.info(s"pushing down for ExtractEquiJoinKeys:right")
-          val carbon = carbonScan(projectList,
-            predicates,
-            carbonRelation.carbonRelation,
-            None,
-            None,
-            None,
-            isGroupByPresent = false,
-            detailQuery = true)
-          val pushedDownJoin = FilterPushJoin(
-            leftKeys: Seq[Expression],
-            rightKeys: Seq[Expression],
-            BuildRight,
-            carbon,
-            planLater(right),
-            condition)
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition,
+      PhysicalOperation(projectList, predicates,
+      l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)), right)
+        if canPushDownJoin(right, condition) =>
+        LOGGER.info(s"pushing down for ExtractEquiJoinKeys:right")
+        val carbon = carbonScan(projectList,
+          predicates,
+          carbonRelation.carbonRelation,
+          None,
+          None,
+          None,
+          isGroupByPresent = false,
+          detailQuery = true)
+        val pushedDownJoin = FilterPushJoin(
+          leftKeys: Seq[Expression],
+          rightKeys: Seq[Expression],
+          BuildRight,
+          carbon,
+          planLater(right),
+          condition)
 
-          condition.map(Filter(_, pushedDownJoin)).getOrElse(pushedDownJoin) :: Nil
+        condition.map(Filter(_, pushedDownJoin)).getOrElse(pushedDownJoin) :: Nil
 
-        case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left,
-        PhysicalOperation(projectList, predicates,
-        l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)))
-          if canPushDownJoin(left, condition) =>
-          LOGGER.info(s"pushing down for ExtractEquiJoinKeys:left")
-          val carbon = carbonScan(projectList,
-            predicates,
-            carbonRelation.carbonRelation,
-            None,
-            None,
-            None,
-            isGroupByPresent = false,
-            detailQuery = true)
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left,
+      PhysicalOperation(projectList, predicates,
+      l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _)))
+        if canPushDownJoin(left, condition) =>
+        LOGGER.info(s"pushing down for ExtractEquiJoinKeys:left")
+        val carbon = carbonScan(projectList,
+          predicates,
+          carbonRelation.carbonRelation,
+          None,
+          None,
+          None,
+          isGroupByPresent = false,
+          detailQuery = true)
 
-          val pushedDownJoin = FilterPushJoin(
-            leftKeys: Seq[Expression],
-            rightKeys: Seq[Expression],
-            BuildLeft,
-            planLater(left),
-            carbon,
-            condition)
-          condition.map(Filter(_, pushedDownJoin)).getOrElse(pushedDownJoin) :: Nil
+        val pushedDownJoin = FilterPushJoin(
+          leftKeys: Seq[Expression],
+          rightKeys: Seq[Expression],
+          BuildLeft,
+          planLater(left),
+          carbon,
+          condition)
+        condition.map(Filter(_, pushedDownJoin)).getOrElse(pushedDownJoin) :: Nil
 
       case _ => Nil
     }

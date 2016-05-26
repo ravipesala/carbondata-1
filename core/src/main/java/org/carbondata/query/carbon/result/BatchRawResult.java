@@ -30,7 +30,7 @@ import org.carbondata.query.carbon.wrappers.ByteArrayWrapper;
 /**
  * Below class holds the query result
  */
-public class BatchRawResult implements CarbonIterator<Object[]> {
+public class BatchRawResult extends CarbonIterator<Object[]> {
 
   /**
    * list of keys

@@ -51,27 +51,25 @@ private[sql] case class CarbonDatasourceHadoopRelation(sqlContext: SQLContext,
 
   val (carbonRelation, jobConf) = {
     val options = new CarbonOption(parameters)
-    val tableIdentifier = options.tableIdentifier.split("""\.""").toSeq
-
     val job: Job = new Job(new JobConf())
-    FileInputFormat.setInputPaths(job, paths(0))
+    FileInputFormat.setInputPaths(job, paths.head)
     val identifier = new CarbonTableIdentifier(options.dbName, options.tableName)
     CarbonInputFormat.setTableToAccess(job.getConfiguration, identifier)
     val table = CarbonInputFormat.getCarbonTable(job.getConfiguration)
     if(table == null) {
-      sys.error(s"Store path ${paths(0)} is not valid or " +
+      sys.error(s"Store path ${paths.head} is not valid or " +
                 s"table ${identifier.getTableUniqueName}  does not exist in path.")
     }
     val relation = CarbonRelation(table.getDatabaseName,
       table.getFactTableName,
       CarbonSparkUtil.createSparkMeta(table),
       TableMeta(identifier,
-        paths(0),
+        paths.head,
         table,
         Partitioner(options.partitionClass,
           Array(""),
           options.partitionCount.toInt,
-          CarbonEnv.getInstance(sqlContext).carbonCatalog.getNodeList())),
+          CarbonEnv.getInstance(sqlContext).carbonCatalog.getNodeList)),
       None)(sqlContext)
 
     (relation, job.getConfiguration)
@@ -92,7 +90,7 @@ private[sql] case class CarbonDatasourceHadoopRelation(sqlContext: SQLContext,
       .reduceOption(new AndExpression(_, _))
       .foreach(CarbonInputFormat.setFilterPredicates(conf, _))
     val projection = new CarbonProjection
-    requiredColumns.map(projection.addColumn)
+    requiredColumns.foreach(projection.addColumn)
     CarbonInputFormat.setColumnProjection(projection, conf)
     CarbonInputFormat.setCarbonReadSupport(classOf[SparkRowReadSupportImpl], conf)
 
