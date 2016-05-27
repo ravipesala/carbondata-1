@@ -295,7 +295,8 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
           j.condition match {
             case Some(expression) =>
               expression.collect {
-                case attr: AttributeReference if isDictionaryEncoded(attr, relations, attrToRltnMap) =>
+                case attr: AttributeReference
+                  if isDictionaryEncoded(attr, relations, attrToRltnMap) =>
                   attrsOnJoin.add(attr)
               }
             case _ =>
@@ -304,7 +305,8 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
         case sort: Sort =>
           sort.order.map { s =>
             s.collect {
-              case attr: AttributeReference if isDictionaryEncoded(attr, relations, attrToRltnMap) =>
+              case attr: AttributeReference
+                if isDictionaryEncoded(attr, relations, attrToRltnMap) =>
                 attrsOnSort.add(attr)
             }
           }
@@ -428,10 +430,8 @@ class CarbonOptimizer(optimizer: Optimizer, conf: CatalystConf) extends Optimize
     def qualifierPresence(plan: LogicalPlan, attr: Attribute): Boolean = {
       var present = false
       plan collect {
-        case l: LogicalRelation =>
-          if(l.attributeMap.contains(attr)) {
-            present = true
-          }
+        case l: LogicalRelation if l.attributeMap.contains(attr) =>
+          present = true
       }
       present
     }

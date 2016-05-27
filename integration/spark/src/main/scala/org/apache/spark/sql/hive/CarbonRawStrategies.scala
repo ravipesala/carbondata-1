@@ -97,7 +97,6 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         namedGroupingAttributes: Seq[Attribute],
         rewrittenAggregateExpressions: Seq[NamedExpression]):
     Seq[SparkPlan] = {
-      val (_, _, _, aliases, groupExprs, substitutesortExprs, limitExpr) = extractPlan(plan)
       val groupByPresentOnMsr = isGroupByPresentOnMeasures(groupingExpressions,
         carbonRelation.carbonRelation.metaData.carbonTable)
       if(!groupByPresentOnMsr) {
@@ -106,8 +105,8 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
           carbonRelation,
           logicalRelation,
           Some(partialComputation),
-          false,
-          true)(sqlContext)
+          detailQuery = false,
+          useBinaryAggregation = true)(sqlContext)
         // If any aggregate function present on dimnesions then don't use this plan.
         if (!s._2) {
           CarbonAggregate(
@@ -164,7 +163,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
             tableName,
             projectExprsNeedToDecode.asScala.toSeq,
             scan)
-          if (scan.unprocessedExprs.size > 0) {
+          if (scan.unprocessedExprs.nonEmpty) {
             val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
             (Project(projectList, filterCondToAdd.map(Filter(_, decoder)).getOrElse(decoder)), true)
           } else {
@@ -180,7 +179,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
             tableName,
             projectExprsNeedToDecode.asScala.toSeq,
             scan)
-          if (scan.unprocessedExprs.size > 0) {
+          if (scan.unprocessedExprs.nonEmpty) {
             val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
             (Project(projectList, filterCondToAdd.map(Filter(_, decoder)).getOrElse(decoder)), true)
           } else {
@@ -205,12 +204,11 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
       // Check out any expressions are there in project list. if they are present then we need to
       // decode them as well.
       val projectExprsNeedToDecode = new java.util.HashSet[Attribute]()
-      val projectSet = AttributeSet(projectList.flatMap(_.references))
       val scan = CarbonRawTableScan(projectList.map(_.toAttribute),
         relation.carbonRelation,
         predicates,
         None,
-        false)(sqlContext)
+        useBinaryAggregator = false)(sqlContext)
       projectExprsNeedToDecode.addAll(scan.attributesNeedToDecode)
       if (projectExprsNeedToDecode.size() > 0) {
         val decoder = getCarbonDecoder(relation,
@@ -218,7 +216,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
           tableName,
           projectExprsNeedToDecode.asScala.toSeq,
           scan)
-        if (scan.unprocessedExprs.size > 0) {
+        if (scan.unprocessedExprs.nonEmpty) {
           val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
           filterCondToAdd.map(Filter(_, decoder)).getOrElse(decoder)
         } else {
@@ -248,25 +246,6 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
       decoder
     }
 
-    private def extractPlan(plan: LogicalPlan) = {
-      val (a, b, c, aliases, groupExprs, sortExprs, limitExpr) =
-        PhysicalOperation1.collectProjectsAndFilters(plan)
-      val substitutesortExprs = sortExprs match {
-        case Some(sort) =>
-          Some(sort.map {
-            case SortOrder(a: Alias, direction) =>
-              val ref = aliases.getOrElse(a.toAttribute, a) match {
-                case Alias(ref, name) => ref
-                case others => others
-              }
-              SortOrder(ref, direction)
-            case others => others
-          })
-        case others => others
-      }
-      (a, b, c, aliases, groupExprs, substitutesortExprs, limitExpr)
-    }
-
     private def isStarQuery(plan: LogicalPlan) = {
       plan match {
         case LogicalFilter(condition,
@@ -280,10 +259,9 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         carbonTable: CarbonTable): Boolean = {
       groupingExpressions.map { g =>
        g.collect {
-         case attr: AttributeReference =>
-           if(carbonTable.getMeasureByName(carbonTable.getFactTableName, attr.name) != null) {
-             return true
-           }
+         case attr: AttributeReference
+           if carbonTable.getMeasureByName(carbonTable.getFactTableName, attr.name) != null =>
+           return true
        }
       }
       false

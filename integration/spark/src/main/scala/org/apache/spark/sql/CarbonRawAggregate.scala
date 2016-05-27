@@ -144,7 +144,7 @@ case class CarbonRawAggregate(
       val numInputRows = longMetric("numInputRows")
       val numOutputRows = longMetric("numOutputRows")
       val pOrder = order.zipWithIndex.map {f =>
-        if(f._2 > 0 && order(f._2-1) == f._1) {
+        if (f._2 > 0 && order(f._2-1) == f._1) {
           f._1 + 1
         } else {
           f._1
@@ -222,7 +222,7 @@ case class CarbonRawAggregate(
               }
               new GenericMutableRow(
                 currentRow.parseKey(
-                  currentGroup,aggregateResults.asInstanceOf[Array[Object]], pOrder).map(toType))
+                  currentGroup, aggregateResults.asInstanceOf[Array[Object]], pOrder).map(toType))
             }
           }
         }
