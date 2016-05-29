@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{UnaryNode, _}
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.execution.command.tableModel
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.optimizer.{CarbonAliasDecoderRelation, CarbonDecoderRelation}
 import org.apache.spark.sql.types.{BooleanType, DataType, StringType, TimestampType}
 
 import org.carbondata.spark.agg._
@@ -172,15 +173,17 @@ case class DescribeFormattedCommand(sql: String, tblIdentifier: Seq[String])
 }
 
 case class CarbonDictionaryCatalystDecoder(
-    relations: Map[String, CarbonDatasourceRelation],
+    relations: Seq[CarbonDecoderRelation],
     profile: CarbonProfile,
-    attrToRltnMap: Map[String, String],
-    aliasMap: Map[String, Attribute],
+    aliasMap: CarbonAliasDecoderRelation,
+    isOuter: Boolean,
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
-abstract class CarbonProfile(attributes: Seq[Attribute]) extends Serializable
+abstract class CarbonProfile(attributes: Seq[Attribute]) extends Serializable{
+  def isEmpty: Boolean = attributes.isEmpty
+}
 case class IncludeProfile(attributes: Seq[Attribute]) extends CarbonProfile(attributes)
 case class ExcludeProfile(attributes: Seq[Attribute]) extends CarbonProfile(attributes)
 

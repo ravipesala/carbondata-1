@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 import org.apache.spark.sql.hive.CarbonMetastoreCatalog
+import org.apache.spark.sql.optimizer.{CarbonAliasDecoderRelation, CarbonDecoderRelation}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -38,10 +39,9 @@ import org.carbondata.query.carbon.util.DataTypeUtil
  *
  */
 case class CarbonDictionaryDecoder(
-    relations: Map[String, CarbonDatasourceRelation],
+    relations: Seq[CarbonDecoderRelation],
     profile: CarbonProfile,
-    attrToRltnMap: Map[String, String],
-    aliasMap: Map[String, Attribute],
+    aliasMap: CarbonAliasDecoderRelation,
     child: SparkPlan)
   (@transient sqlContext: SQLContext)
   extends UnaryNode {
@@ -49,57 +49,34 @@ case class CarbonDictionaryDecoder(
 
   override def otherCopyArgs: Seq[AnyRef] = sqlContext :: Nil
 
-  override def output: Seq[Attribute] = {
-    child.output.map { attr =>
-      var attrReference = attr.asInstanceOf[AttributeReference]
-      if(attrReference.exprId.id == 0) {
-        attrReference = aliasMap.get(attrReference.name) match {
-          case Some(attribute) => attribute.asInstanceOf[AttributeReference]
-          case _ => attrReference
-        }
-      }
-      val qualifier = getValidQualifier(attrReference)
-
-      if (qualifier != null) {
-        val carbonTable = relations.get(qualifier).get.carbonRelation.metaData.carbonTable
+  override val output: Seq[Attribute] = {
+    child.output.map { a =>
+      val attr = aliasMap.getOrElse(a, a)
+      val relation = relations.find(p => p.contains(attr))
+      if(relation.isDefined) {
+        val carbonTable = relation.get.carbonRelation.carbonRelation.metaData.carbonTable
         val carbonDimension = carbonTable
-          .getDimensionByName(carbonTable.getFactTableName, attrReference.name)
-        if (carbonDimension != null && carbonDimension.getEncoder.contains(Encoding.DICTIONARY) &&
-            canBeDecoded(attrReference)) {
-          val a = AttributeReference(attrReference.name,
+          .getDimensionByName(carbonTable.getFactTableName, attr.name)
+        if (carbonDimension != null &&
+            carbonDimension.hasEncoding(Encoding.DICTIONARY) &&
+            !carbonDimension.hasEncoding(Encoding.DIRECT_DICTIONARY) &&
+            canBeDecoded(attr)) {
+          val newAttr = AttributeReference(a.name,
             convertCarbonToSparkDataType(carbonDimension.getDataType),
-            attrReference.nullable,
-            attrReference.metadata)(attrReference.exprId,
-            attrReference.qualifiers).asInstanceOf[Attribute]
-          a.resolved
-          a
+            a.nullable,
+            a.metadata)(a.exprId,
+            a.qualifiers).asInstanceOf[Attribute]
+          newAttr.resolved
+          newAttr
         } else {
-          attr
+          a
         }
       } else {
-        attr
+        a
       }
     }
   }
 
-  def getValidQualifier(attrReference: AttributeReference): String = {
-    var qualifier: String = null
-    if (attrReference.qualifiers.isEmpty) {
-      qualifier = attrToRltnMap.get(attrReference.exprId.id.toString) match {
-        case Some(name) => name
-        case _ => null
-      }
-    } else {
-      qualifier = relations.get(attrReference.qualifiers.head) match {
-        case Some(relation) => attrReference.qualifiers.head
-        case _ => attrToRltnMap.get(attrReference.exprId.id.toString) match {
-          case Some(name) => name
-          case _ => null
-        }
-      }
-    }
-    qualifier
-  }
 
   def canBeDecoded(attr: Attribute): Boolean = {
     profile match {
@@ -125,31 +102,26 @@ case class CarbonDictionaryDecoder(
 
   val getDictionaryColumnIds = {
     val attributes = child.output
-    val dictIds: Array[(String, String, DataType)] = attributes.map(attr => {
-      var attrReference = attr.asInstanceOf[AttributeReference]
-      if(attrReference.exprId.id == 0) {
-        attrReference = aliasMap.get(attrReference.name) match {
-          case Some(attribute) => attribute.asInstanceOf[AttributeReference]
-          case _ => attrReference
-        }
-      }
-      val qualifier = getValidQualifier(attrReference)
-
-      if (qualifier != null) {
-        val carbonTable = relations.get(qualifier)
-          .get.carbonRelation.metaData.carbonTable
+    val dictIds: Array[(String, String, DataType)] = attributes.map { a =>
+      val attr = aliasMap.getOrElse(a, a)
+      val relation = relations.find(p => p.contains(attr))
+      if(relation.isDefined) {
+        val carbonTable = relation.get.carbonRelation.carbonRelation.metaData.carbonTable
         val carbonDimension =
-          carbonTable.getDimensionByName(carbonTable.getFactTableName, attrReference.name)
-        if (carbonDimension != null && carbonDimension.hasEncoding(Encoding.DICTIONARY) &&
-            canBeDecoded(attrReference)) {
-          (qualifier, carbonDimension.getColumnId, carbonDimension.getDataType)
+          carbonTable.getDimensionByName(carbonTable.getFactTableName, attr.name)
+        if (carbonDimension != null &&
+            carbonDimension.hasEncoding(Encoding.DICTIONARY) &&
+            !carbonDimension.hasEncoding(Encoding.DIRECT_DICTIONARY) &&
+            canBeDecoded(attr)) {
+          (carbonTable.getFactTableName, carbonDimension.getColumnId, carbonDimension.getDataType)
         } else {
           (null, null, null)
         }
       } else {
         (null, null, null)
       }
-    }).toArray
+
+    }.toArray
     dictIds
   }
 
@@ -157,10 +129,10 @@ case class CarbonDictionaryDecoder(
     attachTree(this, "execute") {
       val storePath = sqlContext.catalog.asInstanceOf[CarbonMetastoreCatalog].storePath
       val absoluteTableIdentifiers = relations.map { relation =>
-        val carbonTable = relation._2.carbonRelation.metaData.carbonTable
-        (relation._1, new AbsoluteTableIdentifier(storePath,
+        val carbonTable = relation.carbonRelation.carbonRelation.metaData.carbonTable
+        (carbonTable.getFactTableName, new AbsoluteTableIdentifier(storePath,
           new CarbonTableIdentifier(carbonTable.getDatabaseName, carbonTable.getFactTableName)))
-      }
+      }.toMap
 
       if (isRequiredToDecode) {
         val dataTypes = child.output.map { attr => attr.dataType }

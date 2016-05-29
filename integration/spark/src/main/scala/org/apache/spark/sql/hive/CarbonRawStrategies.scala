@@ -19,7 +19,6 @@
 package org.apache.spark.sql.hive
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions
@@ -28,6 +27,7 @@ import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, QueryPlanner}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter => LogicalFilter, LogicalPlan}
 import org.apache.spark.sql.execution.{Filter, Project, SparkPlan}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.optimizer.{CarbonAliasDecoderRelation, CarbonDecoderRelation}
 
 import org.carbondata.common.logging.LogServiceFactory
 import org.carbondata.core.carbon.metadata.schema.table.CarbonTable
@@ -74,10 +74,10 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
           handleRawAggregation(plan, plan, projectList, predicates, carbonRelation,
             l, partialComputation, groupingExpressions, namedGroupingAttributes,
             rewrittenAggregateExpressions)
-        case CarbonDictionaryCatalystDecoder(relations, profile, attrToRltnMap, aliasMap, child) =>
+        case CarbonDictionaryCatalystDecoder(relations, profile,
+               aliasMap, _, child) =>
           CarbonDictionaryDecoder(relations,
             profile,
-            attrToRltnMap,
             aliasMap,
             planLater(child))(sqlContext) :: Nil
         case _ =>
@@ -158,7 +158,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
       projectExprsNeedToDecode.addAll(scan.attributesNeedToDecode)
       if (!detailQuery) {
         if (projectExprsNeedToDecode.size > 0) {
-          val decoder = getCarbonDecoder(relation,
+          val decoder = getCarbonDecoder(logicalRelation,
             sc,
             tableName,
             projectExprsNeedToDecode.asScala.toSeq,
@@ -174,7 +174,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         }
       } else {
         if (projectExprsNeedToDecode.size() > 0) {
-          val decoder = getCarbonDecoder(relation,
+          val decoder = getCarbonDecoder(logicalRelation,
             sc,
             tableName,
             projectExprsNeedToDecode.asScala.toSeq,
@@ -211,7 +211,7 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         useBinaryAggregator = false)(sqlContext)
       projectExprsNeedToDecode.addAll(scan.attributesNeedToDecode)
       if (projectExprsNeedToDecode.size() > 0) {
-        val decoder = getCarbonDecoder(relation,
+        val decoder = getCarbonDecoder(logicalRelation,
           sc,
           tableName,
           projectExprsNeedToDecode.asScala.toSeq,
@@ -227,23 +227,23 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
       }
     }
 
-    def getCarbonDecoder(relation: CarbonDatasourceRelation,
+    def getCarbonDecoder(logicalRelation: LogicalRelation,
         sc: SQLContext,
         tableName: String,
         projectExprsNeedToDecode: Seq[Attribute],
         scan: CarbonRawTableScan): CarbonDictionaryDecoder = {
-      val relations = Seq((tableName, relation)).toMap
-      val aliasMap = new ArrayBuffer[(String, String)]()
+      val relation = CarbonDecoderRelation(logicalRelation.attributeMap,
+        logicalRelation.relation.asInstanceOf[CarbonDatasourceRelation])
       val attrs = projectExprsNeedToDecode.map { attr =>
-        aliasMap += ((attr.exprId.id.toString, tableName))
-        AttributeReference(attr.name,
+        val newAttr = AttributeReference(attr.name,
           attr.dataType,
           attr.nullable,
           attr.metadata)(attr.exprId, Seq(tableName))
+        relation.addAttribute(newAttr)
+        newAttr
       }
-      val decoder =
-        CarbonDictionaryDecoder(relations, IncludeProfile(attrs), aliasMap.toMap, Map(), scan)(sc)
-      decoder
+      CarbonDictionaryDecoder(Seq(relation), IncludeProfile(attrs),
+        CarbonAliasDecoderRelation(), scan)(sc)
     }
 
     private def isStarQuery(plan: LogicalPlan) = {

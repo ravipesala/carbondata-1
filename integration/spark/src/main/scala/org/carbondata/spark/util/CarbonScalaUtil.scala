@@ -125,7 +125,8 @@ object CarbonScalaUtil {
                         .asScala.map(x => x.getColName)
       val dictionary =
         carbonTable.getDimensionByTableName(carbonTable.getFactTableName).asScala.map { f =>
-        (f.getColName.toLowerCase, f.hasEncoding(Encoding.DICTIONARY))
+        (f.getColName.toLowerCase,
+          f.hasEncoding(Encoding.DICTIONARY) && !f.hasEncoding(Encoding.DIRECT_DICTIONARY))
       }
       CarbonMetaData(dimensionsAttr, measureAttr, carbonTable, DictionaryMap(dictionary.toMap))
     }

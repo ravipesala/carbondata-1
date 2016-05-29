@@ -21,6 +21,8 @@ package org.carbondata.query.carbon.result;
 
 import org.carbondata.core.carbon.metadata.encoder.Encoding;
 import org.carbondata.core.iterator.CarbonIterator;
+import org.carbondata.core.keygenerator.directdictionary.DirectDictionaryGenerator;
+import org.carbondata.core.keygenerator.directdictionary.DirectDictionaryKeyGeneratorFactory;
 import org.carbondata.core.util.CarbonUtil;
 import org.carbondata.query.carbon.model.QueryDimension;
 import org.carbondata.query.carbon.model.QuerySchemaInfo;
@@ -83,11 +85,15 @@ public class BatchRawResult extends CarbonIterator<Object[]> {
     Object[] parsedData = new Object[queryDimensions.length + rows.length - 1];
     int noDictionaryColumnIndex = 0;
     for (int i = 0; i < queryDimensions.length; i++) {
-      if (!CarbonUtil
-          .hasEncoding(queryDimensions[i].getDimension().getEncoder(), Encoding.DICTIONARY)) {
+      if (!queryDimensions[i].getDimension().hasEncoding(Encoding.DICTIONARY)) {
         parsedData[order[i]] = DataTypeUtil.getDataBasedOnDataType(
             new String(key.getNoDictionaryKeyByIndex(noDictionaryColumnIndex++)),
             queryDimensions[i].getDimension().getDataType());
+      } else if (queryDimensions[i].getDimension().hasEncoding(Encoding.DIRECT_DICTIONARY)) {
+        DirectDictionaryGenerator directDictionaryGenerator = DirectDictionaryKeyGeneratorFactory
+            .getDirectDictionaryGenerator(queryDimensions[i].getDimension().getDataType());
+        parsedData[order[i]] = directDictionaryGenerator.getValueFromSurrogate(
+            (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()]);
       } else {
         parsedData[order[i]] =
             (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()];
@@ -113,9 +119,13 @@ public class BatchRawResult extends CarbonIterator<Object[]> {
         parsedData[i] = DataTypeUtil.getDataBasedOnDataType(
             new String(key.getNoDictionaryKeyByIndex(noDictionaryColumnIndex++)),
             queryDimensions[i].getDimension().getDataType());
+      } else if (queryDimensions[i].getDimension().hasEncoding(Encoding.DIRECT_DICTIONARY)) {
+        DirectDictionaryGenerator directDictionaryGenerator = DirectDictionaryKeyGeneratorFactory
+            .getDirectDictionaryGenerator(queryDimensions[i].getDimension().getDataType());
+        parsedData[i] = directDictionaryGenerator.getValueFromSurrogate(
+            (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()]);
       } else {
-        parsedData[i] =
-            (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()];
+        parsedData[i] = (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()];
       }
     }
     for (int i = 0; i < aggData.length; i++) {

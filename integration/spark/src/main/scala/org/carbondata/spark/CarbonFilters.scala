@@ -18,11 +18,13 @@
 package org.carbondata.spark
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.FakeCarbonCast
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.optimizer.CarbonAliasDecoderRelation
 import org.apache.spark.sql.types.StructType
 
 import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression, Expression => CarbonExpression, LiteralExpression => CarbonLiteralExpression}
@@ -98,7 +100,8 @@ object CarbonFilters {
   // Check out which filters can be pushed down to carbon, remaining can be handled in spark layer.
   // Mostly dimension filters are only pushed down since it is faster in carbon.
   def selectFilters(filters: Seq[Expression],
-      attrList: java.util.HashSet[AttributeReference]): Unit = {
+      attrList: java.util.HashSet[Attribute],
+      aliasMap: CarbonAliasDecoderRelation): Unit = {
     def translate(expr: Expression): Option[sources.Filter] = {
       expr match {
         case Or(left, right) =>
@@ -147,7 +150,7 @@ object CarbonFilters {
         case others =>
           others.collect {
             case attr: AttributeReference =>
-              attrList.add(attr)
+              attrList.add(aliasMap.getOrElse(attr, attr))
           }
           None
       }
@@ -210,7 +213,7 @@ object CarbonFilters {
         case FakeCarbonCast(literal, dataType) => transformExpression(literal)
         case Literal(name, dataType) => Some(new
             CarbonLiteralExpression(name, CarbonScalaUtil.convertSparkToCarbonDataType(dataType)))
-        case Cast(left, right) if (!left.isInstanceOf[Literal]) => transformExpression(left)
+        case Cast(left, right) if !left.isInstanceOf[Literal] => transformExpression(left)
         case others =>
           others.collect {
             case attr: AttributeReference => attributesNeedToDecode.add(attr)
