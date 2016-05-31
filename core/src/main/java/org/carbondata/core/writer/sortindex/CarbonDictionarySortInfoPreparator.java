@@ -24,7 +24,6 @@ import java.util.List;
 
 import org.carbondata.core.cache.dictionary.Dictionary;
 import org.carbondata.core.cache.dictionary.DictionaryChunksWrapper;
-import org.carbondata.core.carbon.CarbonTableIdentifier;
 import org.carbondata.core.carbon.metadata.datatype.DataType;
 import org.carbondata.core.constants.CarbonCommonConstants;
 import org.carbondata.core.util.CarbonUtilException;
@@ -37,20 +36,7 @@ import org.apache.commons.lang.ArrayUtils;
  */
 public class CarbonDictionarySortInfoPreparator {
 
-  /**
-   * Carbon store path
-   */
-  private String carbonStorePath;
-
-  /**
-   * carbon table identifier instance to identify the databaseName & tableName
-   */
-  private CarbonTableIdentifier carbonTableIdentifier;
-
-  public CarbonDictionarySortInfoPreparator(String carbonStorePath,
-      CarbonTableIdentifier carbonTableIdentifier) {
-    this.carbonStorePath = carbonStorePath;
-    this.carbonTableIdentifier = carbonTableIdentifier;
+  public CarbonDictionarySortInfoPreparator() {
   }
 
   /**

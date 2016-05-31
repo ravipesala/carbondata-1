@@ -180,10 +180,9 @@ public class ConditionalFilterResolverImpl implements FilterResolverIntf {
    *
    * @return start IndexKey
    */
-  public void getstartKey(SegmentProperties segmentProperties, long[] startKey,
+  public void getStartKey(SegmentProperties segmentProperties, long[] startKey,
       SortedMap<Integer, byte[]> setOfStartKeyByteArray) {
     if (null == dimColResolvedFilterInfo.getStarIndexKey()) {
-      startKey = FilterUtil.getStartKey(dimColResolvedFilterInfo, segmentProperties, startKey);
       FilterUtil.getStartKeyForNoDictionaryDimension(dimColResolvedFilterInfo, segmentProperties,
           setOfStartKeyByteArray);
     }

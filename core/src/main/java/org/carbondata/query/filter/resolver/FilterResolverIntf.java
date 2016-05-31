@@ -71,7 +71,7 @@ public interface FilterResolverIntf extends Serializable {
    * @param startKey
    * @return long[], array of start keys.
    */
-  void getstartKey(SegmentProperties segmentProperties, long[] startKey,
+  void getStartKey(SegmentProperties segmentProperties, long[] startKey,
       SortedMap<Integer, byte[]> setOfStartKeyByteArray);
 
   /**

@@ -20,10 +20,6 @@
 package org.carbondata.core.file.manager.composite;
 
 public class LoadFolderData extends AbstractFileManager {
-  /**
-   * folder name
-   */
-  private String folderName;
 
   @Override public void add(IFileManagerComposite customData) {
     super.add(customData);
@@ -34,8 +30,6 @@ public class LoadFolderData extends AbstractFileManager {
   }
 
   @Override public void setName(String name) {
-    this.folderName = name;
-
   }
 }
 

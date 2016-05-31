@@ -180,7 +180,7 @@ public class RestructureFilterResolverImpl implements FilterResolverIntf {
    *
    * @return IndexKey.
    */
-  @Override public void getstartKey(SegmentProperties segmentProperties, long[] startKeys,
+  @Override public void getStartKey(SegmentProperties segmentProperties, long[] startKeys,
       SortedMap<Integer, byte[]> noDicStartKeys) {
 
   }
