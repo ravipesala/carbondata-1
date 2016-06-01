@@ -39,9 +39,6 @@ public class CarbonPathFilter implements PathFilter {
   }
 
   @Override public boolean accept(Path path) {
-    String updateTimeStamp = CarbonTablePath.DataFileUtil.getUpdateTimeStamp(path.getName());
     return true;
-    // if (updateTimeStamp.equals(validUpdateTimestamp)) return true;
-    // else return false;
   }
 }
