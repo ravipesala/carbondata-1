@@ -11,7 +11,6 @@ import java.util.Properties;
 import org.carbondata.core.util.CarbonProperties;
 
 import mockit.NonStrictExpectations;
-
 import org.apache.zookeeper.server.ServerConfig;
 import org.apache.zookeeper.server.ZooKeeperServerMain;
 import org.apache.zookeeper.server.quorum.QuorumPeerConfig;
@@ -78,11 +77,6 @@ public class ZooKeeperLockingTest {
     };
 
     ZooKeeperLocking zkl = new ZooKeeperLocking(LockUsage.METADATA_LOCK);
-    try {
-      Thread.sleep(1000);
-    } catch (InterruptedException e) {
-      Assert.assertTrue(false);
-    }
     Assert.assertTrue(zkl.lock());
 
     ZooKeeperLocking zk2 = new ZooKeeperLocking(LockUsage.METADATA_LOCK);
