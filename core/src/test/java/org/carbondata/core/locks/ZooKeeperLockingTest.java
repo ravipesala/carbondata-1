@@ -32,7 +32,8 @@ public class ZooKeeperLockingTest {
    */
   @Before public void setUp() throws Exception {
     Properties startupProperties = new Properties();
-    startupProperties.setProperty("dataDir", (new File(".").getAbsolutePath()));
+    startupProperties.setProperty("dataDir", (new File("./target").getAbsolutePath()));
+    startupProperties.setProperty("dataLogDir", (new File("./target").getAbsolutePath()));
     freePort = findFreePort();
     startupProperties.setProperty("clientPort", "" + freePort);
     QuorumPeerConfig quorumConfiguration = new QuorumPeerConfig();
