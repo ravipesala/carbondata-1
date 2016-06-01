@@ -26,7 +26,7 @@ import org.carbondata.query.carbon.executor.impl.QueryExecutorProperties;
 import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
 import org.carbondata.query.carbon.executor.internal.InternalQueryExecutor;
 import org.carbondata.query.carbon.model.QueryModel;
-import org.carbondata.query.carbon.result.BatchRawResult;
+import org.carbondata.query.carbon.result.BatchResult;
 import org.carbondata.query.carbon.result.Result;
 import org.carbondata.query.carbon.result.preparator.QueryResultPreparator;
 import org.carbondata.query.carbon.result.preparator.impl.RawQueryResultPreparatorImpl;
@@ -36,10 +36,9 @@ import org.carbondata.query.carbon.result.preparator.impl.RawQueryResultPreparat
  * executing that query are returning a iterator over block and every time next
  * call will come it will execute the block and return the result
  */
-public class DetailRawQueryResultIterator
-    extends AbstractDetailQueryResultIterator<BatchRawResult> {
+public class DetailRawQueryResultIterator extends AbstractDetailQueryResultIterator {
 
-  private QueryResultPreparator<BatchRawResult> queryResultPreparator;
+  private QueryResultPreparator queryResultPreparator;
 
   public DetailRawQueryResultIterator(List<BlockExecutionInfo> infos,
       QueryExecutorProperties executerProperties, QueryModel queryModel,
@@ -48,7 +47,7 @@ public class DetailRawQueryResultIterator
     this.queryResultPreparator = new RawQueryResultPreparatorImpl(executerProperties, queryModel);
   }
 
-  @Override public BatchRawResult next() {
+  @Override public BatchResult next() {
     updateSliceIndexToBeExecuted();
     CarbonIterator<Result> result = null;
     try {

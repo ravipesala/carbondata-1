@@ -20,9 +20,9 @@ package org.carbondata.query.carbon.result.preparator.impl;
 
 import java.math.BigDecimal;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 import org.carbondata.common.logging.LogService;
 import org.carbondata.common.logging.LogServiceFactory;
@@ -44,8 +44,6 @@ import org.carbondata.query.carbon.result.BatchResult;
 import org.carbondata.query.carbon.result.Result;
 import org.carbondata.query.carbon.util.DataTypeUtil;
 import org.carbondata.query.carbon.wrappers.ByteArrayWrapper;
-import org.carbondata.query.scanner.impl.CarbonKey;
-import org.carbondata.query.scanner.impl.CarbonValue;
 
 /**
  * Below class will be used to get the result by converting to actual data
@@ -60,7 +58,9 @@ import org.carbondata.query.scanner.impl.CarbonValue;
  * for example its implementation case return converted result or directly result with out
  * converting to actual value
  */
-public class QueryResultPreparatorImpl extends AbstractQueryResultPreparator<BatchResult> {
+public class QueryResultPreparatorImpl
+    extends AbstractQueryResultPreparator
+    <Map<ByteArrayWrapper, MeasureAggregator[]>, MeasureAggregator> {
 
   private static final LogService LOGGER =
       LogServiceFactory.getLogService(QueryResultPreparatorImpl.class.getName());
@@ -70,7 +70,8 @@ public class QueryResultPreparatorImpl extends AbstractQueryResultPreparator<Bat
     super(executerProperties, queryModel);
   }
 
-  @Override public BatchResult prepareQueryResult(Result scannedResult) {
+  @Override public BatchResult prepareQueryResult(
+      Result<Map<ByteArrayWrapper, MeasureAggregator[]>, MeasureAggregator> scannedResult) {
     if ((null == scannedResult || scannedResult.size() < 1)) {
       return new BatchResult();
     }
@@ -134,50 +135,39 @@ public class QueryResultPreparatorImpl extends AbstractQueryResultPreparator<Bat
 
   private BatchResult getResult(QueryModel queryModel, Object[][] convertedResult) {
 
-    List<CarbonKey> keys = new ArrayList<CarbonKey>(CarbonCommonConstants.DEFAULT_COLLECTION_SIZE);
-    List<CarbonValue> values =
-        new ArrayList<CarbonValue>(CarbonCommonConstants.DEFAULT_COLLECTION_SIZE);
+    Object[][] rows = new Object[convertedResult[0].length][];
     List<QueryDimension> queryDimensions = queryModel.getQueryDimension();
     int dimensionCount = queryDimensions.size();
     int msrCount = queryExecuterProperties.measureAggregators.length;
     Object[][] resultDataA = null;
-    // @TODO no sure why this check is here as in the caller of this method
-    // is returning in case of
-    // function query. Need to confirm with other developer who handled this
-    // scneario
-    if (queryExecuterProperties.isFunctionQuery) {
-      msrCount = 1;
-      resultDataA = new Object[dimensionCount + msrCount][msrCount];
-    } else {
-      resultDataA = new Object[dimensionCount + msrCount][convertedResult[0].length];
-    }
+    int rowSize = convertedResult[0].length;
     Object[] row = null;
     QueryDimension queryDimension = null;
-    for (int columnIndex = 0; columnIndex < resultDataA[0].length; columnIndex++) {
+    for (int rowIndex = 0; rowIndex < rowSize; rowIndex++) {
       row = new Object[dimensionCount + msrCount];
       for (int i = 0; i < dimensionCount; i++) {
         queryDimension = queryDimensions.get(i);
         if (!CarbonUtil
             .hasEncoding(queryDimension.getDimension().getEncoder(), Encoding.DICTIONARY)) {
-          row[queryDimension.getQueryOrder()] = convertedResult[i][columnIndex];
+          row[queryDimension.getQueryOrder()] = convertedResult[i][rowIndex];
         } else if (CarbonUtil
             .hasEncoding(queryDimension.getDimension().getEncoder(), Encoding.DIRECT_DICTIONARY)) {
           DirectDictionaryGenerator directDictionaryGenerator = DirectDictionaryKeyGeneratorFactory
               .getDirectDictionaryGenerator(queryDimension.getDimension().getDataType());
           row[queryDimension.getQueryOrder()] = directDictionaryGenerator
-              .getValueFromSurrogate((Integer) convertedResult[i][columnIndex]);
+              .getValueFromSurrogate((Integer) convertedResult[i][rowIndex]);
         } else {
           if (queryExecuterProperties.sortDimIndexes[i] == 1) {
             row[queryDimension.getQueryOrder()] = DataTypeUtil.getDataBasedOnDataType(
                 queryExecuterProperties.columnToDictionayMapping
                     .get(queryDimension.getDimension().getColumnId())
-                    .getDictionaryValueFromSortedIndex((Integer) convertedResult[i][columnIndex]),
+                    .getDictionaryValueFromSortedIndex((Integer) convertedResult[i][rowIndex]),
                 queryDimension.getDimension().getDataType());
           } else {
             row[queryDimension.getQueryOrder()] = DataTypeUtil.getDataBasedOnDataType(
                 queryExecuterProperties.columnToDictionayMapping
                     .get(queryDimension.getDimension().getColumnId())
-                    .getDictionaryValueForKey((Integer) convertedResult[i][columnIndex]),
+                    .getDictionaryValueForKey((Integer) convertedResult[i][rowIndex]),
                 queryDimension.getDimension().getDataType());
           }
         }
@@ -185,9 +175,9 @@ public class QueryResultPreparatorImpl extends AbstractQueryResultPreparator<Bat
       MeasureAggregator[] msrAgg =
           new MeasureAggregator[queryExecuterProperties.measureAggregators.length];
 
-      fillMeasureValueForAggGroupByQuery(queryModel, convertedResult, dimensionCount, columnIndex,
+      fillMeasureValueForAggGroupByQuery(queryModel, convertedResult, dimensionCount, rowIndex,
           msrAgg);
-      fillDimensionAggValue(queryModel, convertedResult, dimensionCount, columnIndex, msrAgg);
+      fillDimensionAggValue(queryModel, convertedResult, dimensionCount, rowIndex, msrAgg);
 
       if (!queryModel.isDetailQuery()) {
         for (int i = 0; i < queryModel.getQueryMeasures().size(); i++) {
@@ -205,7 +195,7 @@ public class QueryResultPreparatorImpl extends AbstractQueryResultPreparator<Bat
         for (int i = 0; i < queryModel.getExpressions().size(); i++) {
           row[queryModel.getExpressions().get(i).getQueryOrder()] =
               ((MeasureAggregator) convertedResult[dimensionCount
-                  + queryExecuterProperties.aggExpressionStartIndex + i][columnIndex]).get();
+                  + queryExecuterProperties.aggExpressionStartIndex + i][rowIndex]).get();
         }
       } else {
         QueryMeasure msr = null;
@@ -230,14 +220,12 @@ public class QueryResultPreparatorImpl extends AbstractQueryResultPreparator<Bat
           }
         }
       }
-      values.add(new CarbonValue(new MeasureAggregator[0]));
-      keys.add(new CarbonKey(row));
+      rows[rowIndex] = row;
     }
     LOGGER.info("###########################################------ Total Number of records"
-            + resultDataA[0].length);
+        + rowSize);
     BatchResult chunkResult = new BatchResult();
-    chunkResult.setKeys(keys);
-    chunkResult.setValues(values);
+    chunkResult.setRows(rows);
     return chunkResult;
   }
 

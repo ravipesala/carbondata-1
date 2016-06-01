@@ -144,6 +144,7 @@ public abstract class AbstractQueryExecutor<E> implements QueryExecutor<E> {
       dataTypes[currentIndex] = carbonMeasure.getMeasure().getDataType();
       currentIndex++;
     }
+    queryProperties.measureDataTypes = dataTypes;
     queryProperties.measureAggregators = MeasureAggregatorFactory
         .getMeassureAggregator(aggTypes, dataTypes, queryModel.getExpressions());
     // as aggregation will be executed in following order
@@ -436,6 +437,7 @@ public abstract class AbstractQueryExecutor<E> implements QueryExecutor<E> {
     // setting the measure aggregator for all aggregation function selected
     // in query
     aggregatorInfos.setMeasuresAggreagators(queryProperties.measureAggregators);
+    aggregatorInfos.setMeasureDataTypes(queryProperties.measureDataTypes);
     return aggregatorInfos;
   }
 
