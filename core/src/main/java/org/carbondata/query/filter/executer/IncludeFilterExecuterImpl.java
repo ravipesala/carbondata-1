@@ -87,7 +87,6 @@ public class IncludeFilterExecuterImpl implements FilterExecuter {
     for (int i = 0; i < filterValues.length; i++) {
       byte[] filterVal = filterValues[i];
       if (null != listOfColumnarKeyBlockDataForNoDictionaryVals) {
-
         if (null != columnIndexArray) {
           for (int index : columnIndexArray) {
             byte[] noDictionaryVal =
@@ -97,7 +96,6 @@ public class IncludeFilterExecuterImpl implements FilterExecuter {
             }
           }
         } else if (null != columnReverseIndexArray) {
-
           for (int index : columnReverseIndexArray) {
             byte[] noDictionaryVal =
                 listOfColumnarKeyBlockDataForNoDictionaryVals.get(columnReverseIndexArray[index]);
@@ -106,7 +104,6 @@ public class IncludeFilterExecuterImpl implements FilterExecuter {
             }
           }
         } else {
-
           for (int index = 0;
                index < listOfColumnarKeyBlockDataForNoDictionaryVals.size(); index++) {
             if (ByteUtil.UnsafeComparer.INSTANCE
@@ -114,12 +111,9 @@ public class IncludeFilterExecuterImpl implements FilterExecuter {
                 == 0) {
               bitSet.set(index);
             }
-
           }
-
         }
       }
-
     }
     return bitSet;
 

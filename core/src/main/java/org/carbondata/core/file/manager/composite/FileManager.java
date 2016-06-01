@@ -19,17 +19,50 @@
 
 package org.carbondata.core.file.manager.composite;
 
-public class LoadFolderData extends AbstractFileManager {
+import java.util.ArrayList;
+import java.util.List;
+
+import org.carbondata.core.constants.CarbonCommonConstants;
+
+public class FileManager implements IFileManagerComposite {
+  /**
+   * listOfFileData, composite parent which holds the different objects
+   */
+  protected List<IFileManagerComposite> listOfFileData =
+      new ArrayList<IFileManagerComposite>(CarbonCommonConstants.CONSTANT_SIZE_TEN);
+
+  protected String fileName;
 
   @Override public void add(IFileManagerComposite customData) {
-    super.add(customData);
+    listOfFileData.add(customData);
   }
 
-  @Override public boolean rename(IFileManagerComposite composite) {
+  @Override public void remove(IFileManagerComposite customData) {
+    listOfFileData.remove(customData);
+
+  }
+
+  @Override public IFileManagerComposite get(int i) {
+    return listOfFileData.get(i);
+  }
+
+  /**
+   * Renames the File/Folders
+   */
+  public boolean rename(IFileManagerComposite composite) {
     return false;
   }
 
   @Override public void setName(String name) {
+    this.fileName = name;
   }
+
+  /**
+   * Return the size
+   */
+  public int size() {
+    return listOfFileData.size();
+  }
+
 }
 

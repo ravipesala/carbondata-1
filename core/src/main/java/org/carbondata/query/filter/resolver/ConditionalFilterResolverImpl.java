@@ -176,9 +176,7 @@ public class ConditionalFilterResolverImpl implements FilterResolverIntf {
   }
 
   /**
-   * method will get the start key based on the filter surrogates
-   *
-   * @return start IndexKey
+   * method will calculates the start key based on the filter surrogates
    */
   public void getStartKey(SegmentProperties segmentProperties, long[] startKey,
       SortedMap<Integer, byte[]> setOfStartKeyByteArray) {

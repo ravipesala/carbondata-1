@@ -36,9 +36,6 @@ import org.apache.commons.lang.ArrayUtils;
  */
 public class CarbonDictionarySortInfoPreparator {
 
-  public CarbonDictionarySortInfoPreparator() {
-  }
-
   /**
    * The method returns the column Sort Info
    *

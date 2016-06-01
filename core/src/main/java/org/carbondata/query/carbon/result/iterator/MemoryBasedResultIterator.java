@@ -41,7 +41,7 @@ public class MemoryBasedResultIterator extends CarbonIterator<Result> {
    * @return the next element in the iteration
    */
   @Override public Result next() {
-    if(hasNext) {
+    if (hasNext) {
       hasNext = false;
       return result;
     }
