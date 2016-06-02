@@ -18,6 +18,7 @@
 package org.carbondata.spark.rdd
 
 import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
@@ -27,7 +28,7 @@ import org.carbondata.spark.Value
 import org.carbondata.spark.util.CarbonQueryUtil
 
 
-class CarbonCleanFilesRDD[V](
+class CarbonCleanFilesRDD[V: ClassTag](
     sc: SparkContext,
     valueClass: Value[V],
     schemaName: String,

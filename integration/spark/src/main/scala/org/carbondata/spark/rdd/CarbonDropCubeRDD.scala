@@ -17,6 +17,8 @@
 
 package org.carbondata.spark.rdd
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.command.Partitioner
@@ -24,7 +26,7 @@ import org.apache.spark.sql.execution.command.Partitioner
 import org.carbondata.spark.Value
 import org.carbondata.spark.util.CarbonQueryUtil
 
-class CarbonDropCubeRDD[V](
+class CarbonDropCubeRDD[V: ClassTag](
     sc: SparkContext,
     valueClass: Value[V],
     schemaName: String,

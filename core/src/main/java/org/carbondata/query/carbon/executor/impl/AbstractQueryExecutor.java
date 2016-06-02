@@ -64,7 +64,7 @@ import org.apache.commons.lang3.ArrayUtils;
  * interface to minimize the effort required to implement this interface. This
  * will be used to prepare all the properties required for query execution
  */
-public abstract class AbstractQueryExecutor implements QueryExecutor {
+public abstract class AbstractQueryExecutor<E> implements QueryExecutor<E> {
 
   private static final LogService LOGGER =
       LogServiceFactory.getLogService(AbstractQueryExecutor.class.getName());

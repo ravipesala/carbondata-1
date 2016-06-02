@@ -35,6 +35,7 @@ import org.carbondata.query.carbon.result.AbstractScannedResult;
 import org.carbondata.query.carbon.result.ListBasedResultWrapper;
 import org.carbondata.query.carbon.result.Result;
 import org.carbondata.query.carbon.result.impl.ListBasedResult;
+import org.carbondata.query.carbon.util.DataTypeUtil;
 import org.carbondata.query.carbon.wrappers.ByteArrayWrapper;
 
 /**
@@ -152,14 +153,18 @@ public class ListBasedResultAggregator implements ScannedResultAggregator {
 
   private Object getMeasureData(MeasureColumnDataChunk dataChunk, int index, DataType dataType) {
     if (!dataChunk.getNullValueIndexHolder().getBitSet().get(index)) {
+      Object msrVal;
       switch (dataType) {
         case LONG:
-          return dataChunk.getMeasureDataHolder().getReadableLongValueByIndex(index);
+          msrVal = dataChunk.getMeasureDataHolder().getReadableLongValueByIndex(index);
+          break;
         case DECIMAL:
-          return dataChunk.getMeasureDataHolder().getReadableBigDecimalValueByIndex(index);
+          msrVal = dataChunk.getMeasureDataHolder().getReadableBigDecimalValueByIndex(index);
+          break;
         default:
-          return dataChunk.getMeasureDataHolder().getReadableDoubleValueByIndex(index);
+          msrVal = dataChunk.getMeasureDataHolder().getReadableDoubleValueByIndex(index);
       }
+      return DataTypeUtil.getMeasureDataBasedOnDataType(msrVal, dataType);
     }
     return null;
   }

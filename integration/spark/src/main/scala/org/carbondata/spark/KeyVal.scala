@@ -29,7 +29,7 @@ import org.carbondata.core.load.LoadMetadataDetails
 import org.carbondata.query.carbon.result.BatchRawResult
 import org.carbondata.query.scanner.impl.{CarbonKey, CarbonValue}
 
-trait Value[V] {
+trait Value[V] extends Serializable {
   def getValue(value: Array[Object]): V
 }
 
@@ -37,7 +37,7 @@ class ValueImpl extends Value[Array[Object]] {
   override def getValue(value: Array[Object]): Array[Object] = value
 }
 
-trait RawValue[V] {
+trait RawValue[V] extends Serializable {
   def getValue(value: BatchRawResult): V
 }
 
