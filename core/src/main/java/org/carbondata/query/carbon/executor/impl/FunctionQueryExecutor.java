@@ -29,7 +29,7 @@ import org.carbondata.query.carbon.result.RowResult;
  */
 public class FunctionQueryExecutor extends CountStarQueryExecutor {
 
-  @Override public CarbonIterator<RowResult> execute(QueryModel queryModel)
+  @Override public CarbonIterator<Object[]> execute(QueryModel queryModel)
       throws QueryExecutionException {
     queryProperties.isFunctionQuery = true;
     return super.execute(queryModel);

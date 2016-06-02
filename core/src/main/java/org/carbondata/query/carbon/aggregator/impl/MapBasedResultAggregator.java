@@ -128,9 +128,9 @@ public class MapBasedResultAggregator implements ScannedResultAggregator {
    * Below method will used to get the result
    */
   @Override
-  public Result<Map<ByteArrayWrapper, MeasureAggregator[]>,
-      MeasureAggregator[]> getAggregatedResult() {
-    Result<Map<ByteArrayWrapper, MeasureAggregator[]>, MeasureAggregator[]> result =
+  public Result<Map<ByteArrayWrapper, MeasureAggregator[]>, MeasureAggregator> getAggregatedResult()
+  {
+    Result<Map<ByteArrayWrapper, MeasureAggregator[]>, MeasureAggregator> result =
         new MapBasedResult();
     updateAggregatedResult();
     result.addScannedResult(aggData);

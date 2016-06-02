@@ -35,7 +35,7 @@ import org.carbondata.query.carbon.result.iterator.ChunkRowIterator;
  */
 public class DetailWithOrderByQueryExecutor extends AbstractQueryExecutor {
 
-  @Override public CarbonIterator<RowResult> execute(QueryModel queryModel)
+  @Override public CarbonIterator<Object[]> execute(QueryModel queryModel)
       throws QueryExecutionException {
     // get the execution info
     List<BlockExecutionInfo> blockExecutionInfoList = getBlockExecutionInfos(queryModel);

@@ -1,15 +1,10 @@
 package org.carbondata.query.carbon.result.preparator.impl;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.carbondata.query.aggregator.MeasureAggregator;
 import org.carbondata.query.carbon.executor.impl.QueryExecutorProperties;
 import org.carbondata.query.carbon.model.QueryModel;
 import org.carbondata.query.carbon.result.BatchResult;
 import org.carbondata.query.carbon.result.preparator.QueryResultPreparator;
-import org.carbondata.query.scanner.impl.CarbonKey;
-import org.carbondata.query.scanner.impl.CarbonValue;
 
 public abstract class AbstractQueryResultPreparator<K, V> implements QueryResultPreparator<K, V> {
 
@@ -54,18 +49,9 @@ public abstract class AbstractQueryResultPreparator<K, V> implements QueryResult
   }
 
   protected BatchResult getEmptyChunkResult(int size) {
-    List<CarbonKey> keys = new ArrayList<CarbonKey>(size);
-    List<CarbonValue> values = new ArrayList<CarbonValue>(size);
-    Object[] row = new Object[1];
-    for (int i = 0; i < size; i++)
-
-    {
-      values.add(new CarbonValue(new MeasureAggregator[0]));
-      keys.add(new CarbonKey(row));
-    }
+    Object[][] row = new Object[size][1];
     BatchResult chunkResult = new BatchResult();
-    chunkResult.setKeys(keys);
-    chunkResult.setValues(values);
+    chunkResult.setRows(row);
     return chunkResult;
   }
 

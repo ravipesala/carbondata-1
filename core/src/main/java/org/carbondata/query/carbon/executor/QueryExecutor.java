@@ -27,7 +27,7 @@ import org.carbondata.query.carbon.model.QueryModel;
  * Will be used to execute the query based on the query model
  * and will return the iterator over query result
  */
-public interface QueryExecutor<E> {
+public interface QueryExecutor {
 
   /**
    * Below method will be used to execute the query based on query model passed from driver
@@ -36,5 +36,5 @@ public interface QueryExecutor<E> {
    * @return query result iterator
    * @throws QueryExecutionException if any failure while executing the query
    */
-  CarbonIterator<E> execute(QueryModel queryModel) throws QueryExecutionException;
+  CarbonIterator<Object[]> execute(QueryModel queryModel) throws QueryExecutionException;
 }

@@ -38,7 +38,7 @@ import org.carbondata.core.util.CarbonProperties
 import org.carbondata.query.carbon.model._
 import org.carbondata.query.carbon.result.BatchRawResult
 import org.carbondata.query.carbon.wrappers.ByteArrayWrapper
-import org.carbondata.spark.{CarbonFilters, RawKeyVal, RawKeyValImpl}
+import org.carbondata.spark.{CarbonFilters, RawValue, RawValueImpl}
 import org.carbondata.spark.rdd.CarbonRawQueryRDD
 
 
@@ -64,7 +64,7 @@ case class CarbonRawTableScan(
     val measures = carbonTable.getMeasureByTableName(carbonTable.getFactTableName)
     val dimAttr = new Array[Attribute](dimensions.size())
     val msrAttr = new Array[Attribute](measures.size())
-    attributesRaw.map { attr =>
+    attributesRaw.foreach { attr =>
       val carbonDimension =
         carbonTable.getDimensionByName(carbonTable.getFactTableName, attr.name)
       if(carbonDimension != null) {
@@ -78,7 +78,7 @@ case class CarbonRawTableScan(
       }
     }
 
-    attributesRaw = (dimAttr.filter(f => f != null)) ++ (msrAttr.filter(f => f != null))
+    attributesRaw = dimAttr.filter(f => f != null) ++ msrAttr.filter(f => f != null)
 
     var queryOrder: Integer = 0
     attributesRaw.map { attr =>
@@ -181,14 +181,14 @@ case class CarbonRawTableScan(
   }
 
 
-  def inputRdd: CarbonRawQueryRDD[BatchRawResult, Any] = {
+  def inputRdd: CarbonRawQueryRDD[BatchRawResult] = {
 
     val conf = new Configuration()
     val absoluteTableIdentifier = carbonTable.getAbsoluteTableIdentifier
     buildCarbonPlan.getDimAggregatorInfos.clear()
     val model = QueryModel.createModel(
       absoluteTableIdentifier, buildCarbonPlan, carbonTable)
-    val kv: RawKeyVal[BatchRawResult, Any] = new RawKeyValImpl()
+    val v: RawValue[BatchRawResult] = new RawValueImpl
     // setting queryid
     buildCarbonPlan.setQueryId(ocRaw.getConf("queryId", System.nanoTime() + ""))
 
@@ -196,11 +196,11 @@ case class CarbonRawTableScan(
       .getCubeCreationTime(relationRaw.schemaName, relationRaw.tableName)
     val schemaLastUpdatedTime = carbonCatalog
       .getSchemaLastUpdatedTime(relationRaw.schemaName, relationRaw.tableName)
-    val big = new CarbonRawQueryRDD(
+    val big = new CarbonRawQueryRDD[BatchRawResult](
       ocRaw.sparkContext,
       model,
       buildCarbonPlan.getFilterExpression,
-      kv,
+      v,
       conf,
       cubeCreationTime,
       schemaLastUpdatedTime,
@@ -218,14 +218,13 @@ case class CarbonRawTableScan(
 
     if (useBinaryAggregator) {
       inputRdd.map { row =>
-        //      val dims = row._1.map(toType)
-        new CarbonRawMutableRow(row._1.getAllRows, row._1.getQuerySchemaInfo)
+        new CarbonRawMutableRow(row.getRows, row.getQuerySchemaInfo)
       }
     } else {
       inputRdd.flatMap { row =>
         val buffer = new ArrayBuffer[GenericMutableRow]()
-        while (row._1.hasNext) {
-          buffer += new GenericMutableRow(row._1.next().map(toType))
+        while (row.hasNext) {
+          buffer += new GenericMutableRow(row.next().map(toType))
         }
         buffer
       }

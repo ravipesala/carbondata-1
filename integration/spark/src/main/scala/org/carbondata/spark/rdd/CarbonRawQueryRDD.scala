@@ -36,7 +36,7 @@ import org.carbondata.spark.RawKeyVal
  * @param sc
  * @param queryModel
  * @param filterExpression
- * @param keyClass
+ * @param valueClass
  * @param conf
  * @param cubeCreationTime
  * @param schemaLastUpdatedTime
@@ -44,16 +44,16 @@ import org.carbondata.spark.RawKeyVal
  * @tparam K
  * @tparam V
  */
-class CarbonRawQueryRDD[K, V](
+class CarbonRawQueryRDD[V](
     sc: SparkContext,
     queryModel: QueryModel,
     filterExpression: Expression,
-    keyClass: RawKeyVal[K, V],
+    valueClass: RawKeyVal[V],
     @transient conf: Configuration,
     cubeCreationTime: Long,
     schemaLastUpdatedTime: Long,
     baseStoreLocation: String)
-  extends CarbonQueryRDD[K, V](sc,
+  extends CarbonQueryRDD[V](sc,
     queryModel,
     filterExpression,
     null,
@@ -114,7 +114,7 @@ class CarbonRawQueryRDD[K, V](
         }
         havePair = false
         val row = rowIterator.next()
-        keyClass.getKey(row, null)
+        valueClass.getKey(row, null)
       }
 
       logInfo("*************************** Total Time Taken to execute the query in Carbon Side: " +

@@ -14,9 +14,9 @@ import org.carbondata.query.carbon.result.iterator.DetailRawQueryResultIterator;
 /**
  * Executor for raw records, it does not parse to actual data
  */
-public class DetailRawRecordQueryExcecutor extends AbstractQueryExecutor<BatchRawResult> {
+public class DetailRawRecordQueryExcecutor extends AbstractQueryExecutor {
 
-  @Override public CarbonIterator<BatchRawResult> execute(QueryModel queryModel)
+  @Override public CarbonIterator<Object[]> execute(QueryModel queryModel)
       throws QueryExecutionException {
     List<BlockExecutionInfo> blockExecutionInfoList = getBlockExecutionInfos(queryModel);
     InternalQueryExecutor queryExecutor = new InternalDetailQueryExecutor();

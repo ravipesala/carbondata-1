@@ -761,8 +761,8 @@ object CarbonDataRDDFactory extends Logging {
       schema: String,
       cube: String,
       partitioner: Partitioner) {
-    val kv: KeyVal[CarbonKey, CarbonValue] = new KeyValImpl()
-    new CarbonDropAggregateTableRDD(sc, kv, schema, cube, partitioner).collect
+    val v: Value[Array[Object]] = new ValueImpl()
+    new CarbonDropAggregateTableRDD(sc, v, schema, cube, partitioner).collect
   }
 
   def dropCube(
@@ -770,8 +770,8 @@ object CarbonDataRDDFactory extends Logging {
       schema: String,
       cube: String,
       partitioner: Partitioner) {
-    val kv: KeyVal[CarbonKey, CarbonValue] = new KeyValImpl()
-    new CarbonDropCubeRDD(sc, kv, schema, cube, partitioner).collect
+    val v: Value[Array[Object]] = new ValueImpl()
+    new CarbonDropCubeRDD(sc, v, schema, cube, partitioner).collect
   }
 
   def cleanFiles(
