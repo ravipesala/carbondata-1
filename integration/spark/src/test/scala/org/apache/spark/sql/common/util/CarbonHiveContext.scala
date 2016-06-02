@@ -32,7 +32,8 @@ import org.carbondata.spark.load.CarbonLoaderUtil
 class LocalSQLContext(val hdfsCarbonBasePath: String)
   extends CarbonContext(new SparkContext(new SparkConf()
     .setAppName("CarbonSpark")
-    .setMaster("local[2]")), hdfsCarbonBasePath) {
+    .setMaster("local[2]")
+    .set("spark.sql.carbon.push.computation", "true")), hdfsCarbonBasePath) {
 
 }
 

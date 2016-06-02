@@ -26,8 +26,7 @@ import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
 import org.carbondata.query.carbon.executor.internal.InternalQueryExecutor;
 import org.carbondata.query.carbon.executor.internal.impl.InternalDetailWithOrderQueryExecutor;
 import org.carbondata.query.carbon.model.QueryModel;
-import org.carbondata.query.carbon.result.RowResult;
-import org.carbondata.query.carbon.result.iterator.ChunkBasedResultIterator;
+import org.carbondata.query.carbon.result.iterator.ChunkBasedDetailResultIterator;
 import org.carbondata.query.carbon.result.iterator.ChunkRowIterator;
 
 /**
@@ -45,9 +44,8 @@ public class DetailWithOrderByQueryExecutor extends AbstractQueryExecutor {
     blockExecutionInfoList.get(blockExecutionInfoList.size() - 1)
         .setSortInfo(getSortInfos(queryModel));
     InternalQueryExecutor internalQueryExecutor = new InternalDetailWithOrderQueryExecutor();
-    return new ChunkRowIterator(new ChunkBasedResultIterator(
+    return new ChunkRowIterator(new ChunkBasedDetailResultIterator(
         internalQueryExecutor.executeQuery(blockExecutionInfoList, null), queryProperties,
         queryModel));
   }
-
 }

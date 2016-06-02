@@ -1,10 +1,18 @@
 package org.carbondata.query.carbon.result.preparator.impl;
 
+import java.util.List;
+
+import org.carbondata.core.carbon.metadata.encoder.Encoding;
+import org.carbondata.core.keygenerator.directdictionary.DirectDictionaryGenerator;
+import org.carbondata.core.keygenerator.directdictionary.DirectDictionaryKeyGeneratorFactory;
+import org.carbondata.core.util.CarbonUtil;
 import org.carbondata.query.aggregator.MeasureAggregator;
 import org.carbondata.query.carbon.executor.impl.QueryExecutorProperties;
+import org.carbondata.query.carbon.model.QueryDimension;
 import org.carbondata.query.carbon.model.QueryModel;
 import org.carbondata.query.carbon.result.BatchResult;
 import org.carbondata.query.carbon.result.preparator.QueryResultPreparator;
+import org.carbondata.query.carbon.util.DataTypeUtil;
 
 public abstract class AbstractQueryResultPreparator<K, V> implements QueryResultPreparator<K, V> {
 
@@ -31,6 +39,39 @@ public abstract class AbstractQueryResultPreparator<K, V> implements QueryResult
       v[queryExecuterProperties.measureStartIndex + i] =
           ((MeasureAggregator) surrogateResult[dimensionCount
               + queryExecuterProperties.measureStartIndex + i][columnIndex]);
+    }
+  }
+
+
+  protected void fillDimensionData(Object[][] convertedResult, List<QueryDimension> queryDimensions,
+      int dimensionCount, Object[] row, int rowIndex) {
+    QueryDimension queryDimension;
+    for (int i = 0; i < dimensionCount; i++) {
+      queryDimension = queryDimensions.get(i);
+      if (!CarbonUtil
+          .hasEncoding(queryDimension.getDimension().getEncoder(), Encoding.DICTIONARY)) {
+        row[queryDimension.getQueryOrder()] = convertedResult[i][rowIndex];
+      } else if (CarbonUtil
+          .hasEncoding(queryDimension.getDimension().getEncoder(), Encoding.DIRECT_DICTIONARY)) {
+        DirectDictionaryGenerator directDictionaryGenerator = DirectDictionaryKeyGeneratorFactory
+            .getDirectDictionaryGenerator(queryDimension.getDimension().getDataType());
+        row[queryDimension.getQueryOrder()] = directDictionaryGenerator
+            .getValueFromSurrogate((Integer) convertedResult[i][rowIndex]);
+      } else {
+        if (queryExecuterProperties.sortDimIndexes[i] == 1) {
+          row[queryDimension.getQueryOrder()] = DataTypeUtil.getDataBasedOnDataType(
+              queryExecuterProperties.columnToDictionayMapping
+                  .get(queryDimension.getDimension().getColumnId())
+                  .getDictionaryValueFromSortedIndex((Integer) convertedResult[i][rowIndex]),
+              queryDimension.getDimension().getDataType());
+        } else {
+          row[queryDimension.getQueryOrder()] = DataTypeUtil.getDataBasedOnDataType(
+              queryExecuterProperties.columnToDictionayMapping
+                  .get(queryDimension.getDimension().getColumnId())
+                  .getDictionaryValueForKey((Integer) convertedResult[i][rowIndex]),
+              queryDimension.getDimension().getDataType());
+        }
+      }
     }
   }
 

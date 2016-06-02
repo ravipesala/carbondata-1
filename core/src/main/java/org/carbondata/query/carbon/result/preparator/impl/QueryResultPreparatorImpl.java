@@ -139,39 +139,11 @@ public class QueryResultPreparatorImpl
     List<QueryDimension> queryDimensions = queryModel.getQueryDimension();
     int dimensionCount = queryDimensions.size();
     int msrCount = queryExecuterProperties.measureAggregators.length;
-    Object[][] resultDataA = null;
     int rowSize = convertedResult[0].length;
     Object[] row = null;
-    QueryDimension queryDimension = null;
     for (int rowIndex = 0; rowIndex < rowSize; rowIndex++) {
       row = new Object[dimensionCount + msrCount];
-      for (int i = 0; i < dimensionCount; i++) {
-        queryDimension = queryDimensions.get(i);
-        if (!CarbonUtil
-            .hasEncoding(queryDimension.getDimension().getEncoder(), Encoding.DICTIONARY)) {
-          row[queryDimension.getQueryOrder()] = convertedResult[i][rowIndex];
-        } else if (CarbonUtil
-            .hasEncoding(queryDimension.getDimension().getEncoder(), Encoding.DIRECT_DICTIONARY)) {
-          DirectDictionaryGenerator directDictionaryGenerator = DirectDictionaryKeyGeneratorFactory
-              .getDirectDictionaryGenerator(queryDimension.getDimension().getDataType());
-          row[queryDimension.getQueryOrder()] = directDictionaryGenerator
-              .getValueFromSurrogate((Integer) convertedResult[i][rowIndex]);
-        } else {
-          if (queryExecuterProperties.sortDimIndexes[i] == 1) {
-            row[queryDimension.getQueryOrder()] = DataTypeUtil.getDataBasedOnDataType(
-                queryExecuterProperties.columnToDictionayMapping
-                    .get(queryDimension.getDimension().getColumnId())
-                    .getDictionaryValueFromSortedIndex((Integer) convertedResult[i][rowIndex]),
-                queryDimension.getDimension().getDataType());
-          } else {
-            row[queryDimension.getQueryOrder()] = DataTypeUtil.getDataBasedOnDataType(
-                queryExecuterProperties.columnToDictionayMapping
-                    .get(queryDimension.getDimension().getColumnId())
-                    .getDictionaryValueForKey((Integer) convertedResult[i][rowIndex]),
-                queryDimension.getDimension().getDataType());
-          }
-        }
-      }
+      fillDimensionData(convertedResult, queryDimensions, dimensionCount, row, rowIndex);
       MeasureAggregator[] msrAgg =
           new MeasureAggregator[queryExecuterProperties.measureAggregators.length];
 

@@ -36,6 +36,10 @@ public class BatchResult extends CarbonIterator<Object[]> {
    */
   protected int counter;
 
+  public BatchResult() {
+    this.rows = new Object[0][0];
+  }
+
   /**
    * Below method will be used to get the rows
    *
@@ -70,7 +74,8 @@ public class BatchResult extends CarbonIterator<Object[]> {
    * @return the next element in the iteration
    */
   @Override public Object[] next() {
+    Object[] row = rows[counter];
     counter++;
-    return rows[counter];
+    return row;
   }
 }

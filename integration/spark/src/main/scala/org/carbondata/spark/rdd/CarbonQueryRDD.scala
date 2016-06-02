@@ -171,6 +171,7 @@ class CarbonQueryRDD[V: ClassTag](
           }
           // execute query
           rowIterator = QueryExecutorFactory.getQueryExecutor(queryModel).execute(queryModel)
+            .asInstanceOf[CarbonIterator[Array[Object]]]
         }
         // TODOi
         // : CarbonQueryUtil.isQuickFilter quick filter from dictionary needs to support

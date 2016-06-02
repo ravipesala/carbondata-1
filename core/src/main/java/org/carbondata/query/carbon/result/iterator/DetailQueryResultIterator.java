@@ -32,7 +32,7 @@ import org.carbondata.query.carbon.result.BatchResult;
 import org.carbondata.query.carbon.result.ListBasedResultWrapper;
 import org.carbondata.query.carbon.result.Result;
 import org.carbondata.query.carbon.result.preparator.QueryResultPreparator;
-import org.carbondata.query.carbon.result.preparator.impl.RawQueryResultPreparatorImpl;
+import org.carbondata.query.carbon.result.preparator.impl.DetailQueryResultPreparatorImpl;
 
 /**
  * In case of detail query we cannot keep all the records in memory so for
@@ -56,7 +56,8 @@ public class DetailQueryResultIterator extends AbstractDetailQueryResultIterator
       QueryExecutorProperties executerProperties, QueryModel queryModel,
       InternalQueryExecutor queryExecutor) {
     super(infos, executerProperties, queryModel, queryExecutor);
-    this.queryResultPreparator = new RawQueryResultPreparatorImpl(executerProperties, queryModel);
+    this.queryResultPreparator =
+        new DetailQueryResultPreparatorImpl(executerProperties, queryModel);
   }
 
   @Override public BatchResult next() {
