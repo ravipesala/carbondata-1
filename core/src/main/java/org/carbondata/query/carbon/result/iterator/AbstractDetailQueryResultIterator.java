@@ -75,7 +75,7 @@ public abstract class AbstractDetailQueryResultIterator extends CarbonIterator {
   /**
    * current counter to check how blocklet has been executed
    */
-  private long currentCounter;
+  protected long currentCounter;
 
   /**
    * keep the track of number of blocklet of a block has been executed
@@ -138,7 +138,7 @@ public abstract class AbstractDetailQueryResultIterator extends CarbonIterator {
     return currentCounter < totalNumberOfNode;
   }
 
-  protected void updateSliceIndexToBeExecuted() {
+  protected int updateSliceIndexToBeExecuted() {
     Arrays.fill(blockIndexToBeExecuted, -1);
     int currentSliceIndex = 0;
     int i = 0;
@@ -154,7 +154,7 @@ public abstract class AbstractDetailQueryResultIterator extends CarbonIterator {
         break;
       }
     }
-    currentCounter += i;
+    return i;
   }
 
 }

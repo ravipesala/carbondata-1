@@ -114,29 +114,35 @@ public class ListBasedResultAggregator implements ScannedResultAggregator {
    *
    */
   public int aggregateData(AbstractScannedResult scannedResult) {
-    this.listBasedResult = new ArrayList<ListBasedResultWrapper>(
-        limit == -1 ? scannedResult.numberOfOutputRows() : limit);
+    this.listBasedResult =
+        new ArrayList<>(limit == -1 ? scannedResult.numberOfOutputRows() : limit);
+    boolean isMsrsPresent = measureDatatypes.length > 0;
     ByteArrayWrapper wrapper = null;
     // scan the record and add to list
     ListBasedResultWrapper resultWrapper;
     while (scannedResult.hasNext() && (limit == -1 || rowCounter < limit)) {
-      wrapper = new ByteArrayWrapper();
-      wrapper.setDictionaryKey(scannedResult.getDictionaryKeyArray());
-      wrapper.setNoDictionaryKeys(scannedResult.getNoDictionaryKeyArray());
-      wrapper.setComplexTypesKeys(scannedResult.getComplexTypeKeyArray());
       resultWrapper = new ListBasedResultWrapper();
-      resultWrapper.setKey(wrapper);
-      Object[] msrValues = new Object[measureDatatypes.length];
-      fillMeaseureData(msrValues, scannedResult);
-      resultWrapper.setValue(msrValues);
+      if(tableBlockExecutionInfos.isDimensionsExistInQuery()) {
+        wrapper = new ByteArrayWrapper();
+        wrapper.setDictionaryKey(scannedResult.getDictionaryKeyArray());
+        wrapper.setNoDictionaryKeys(scannedResult.getNoDictionaryKeyArray());
+        wrapper.setComplexTypesKeys(scannedResult.getComplexTypeKeyArray());
+        resultWrapper.setKey(wrapper);
+      } else {
+        scannedResult.incrementCounter();
+      }
+      if(isMsrsPresent) {
+        Object[] msrValues = new Object[measureDatatypes.length];
+        fillMeasureData(msrValues, scannedResult);
+        resultWrapper.setValue(msrValues);
+      }
       listBasedResult.add(resultWrapper);
       rowCounter++;
-
     }
     return rowCounter;
   }
 
-  private void fillMeaseureData(Object[] msrValues, AbstractScannedResult scannedResult) {
+  private void fillMeasureData(Object[] msrValues, AbstractScannedResult scannedResult) {
     for (short i = 0; i < measuresOrdinal.length; i++) {
       // if measure exists is block then pass measure column
       // data chunk to the aggregator

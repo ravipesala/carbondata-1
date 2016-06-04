@@ -25,8 +25,6 @@ import org.carbondata.common.logging.LogService;
 import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.carbon.metadata.encoder.Encoding;
 import org.carbondata.core.constants.CarbonCommonConstants;
-import org.carbondata.core.keygenerator.directdictionary.DirectDictionaryGenerator;
-import org.carbondata.core.keygenerator.directdictionary.DirectDictionaryKeyGeneratorFactory;
 import org.carbondata.core.util.CarbonUtil;
 import org.carbondata.query.carbon.executor.impl.QueryExecutorProperties;
 import org.carbondata.query.carbon.model.QueryDimension;
@@ -83,24 +81,27 @@ public class DetailQueryResultPreparatorImpl
     while (scannedResult.hasNext()) {
       key = scannedResult.getKey();
       value = scannedResult.getValue();
-      surrogateResult = queryExecuterProperties.keyStructureInfo.getKeyGenerator()
-          .getKeyArray(key.getDictionaryKey(),
-              queryExecuterProperties.keyStructureInfo.getMaskedBytes());
-      for (int i = 0; i < dimensionCount; i++) {
-        if (!CarbonUtil
-            .hasEncoding(queryDimension.get(i).getDimension().getEncoder(), Encoding.DICTIONARY)) {
-          resultData[currentRow][i] = DataTypeUtil.getDataBasedOnDataType(
-              new String(key.getNoDictionaryKeyByIndex(noDictionaryColumnIndex++),
-                  Charset.forName(CarbonCommonConstants.DEFAULT_CHARSET)),
-              queryDimension.get(i).getDimension().getDataType());
-        } else {
-          resultData[currentRow][i] =
-              (int) surrogateResult[queryDimension.get(i).getDimension().getKeyOrdinal()];
+      if (key != null) {
+        surrogateResult = queryExecuterProperties.keyStructureInfo.getKeyGenerator()
+            .getKeyArray(key.getDictionaryKey(),
+                queryExecuterProperties.keyStructureInfo.getMaskedBytes());
+        for (int i = 0; i < dimensionCount; i++) {
+          if (!CarbonUtil.hasEncoding(queryDimension.get(i).getDimension().getEncoder(),
+              Encoding.DICTIONARY)) {
+            resultData[currentRow][i] = DataTypeUtil.getDataBasedOnDataType(
+                new String(key.getNoDictionaryKeyByIndex(noDictionaryColumnIndex++),
+                    Charset.forName(CarbonCommonConstants.DEFAULT_CHARSET)),
+                queryDimension.get(i).getDimension().getDataType());
+          } else {
+            resultData[currentRow][i] =
+                (int) surrogateResult[queryDimension.get(i).getDimension().getKeyOrdinal()];
+          }
         }
       }
-
-      System.arraycopy(value, 0, resultData[currentRow], dimensionCount,
-          queryExecuterProperties.measureAggregators.length);
+      if (value != null) {
+        System.arraycopy(value, 0, resultData[currentRow], dimensionCount,
+            queryExecuterProperties.measureAggregators.length);
+      }
       currentRow++;
       noDictionaryColumnIndex = 0;
     }
@@ -112,12 +113,12 @@ public class DetailQueryResultPreparatorImpl
 
   private BatchResult getResult(QueryModel queryModel, Object[][] convertedResult) {
 
-    Object[][] rows = new Object[convertedResult[0].length][];
+    int rowSize = convertedResult[0].length;
+    Object[][] rows = new Object[rowSize][];
     List<QueryDimension> queryDimensions = queryModel.getQueryDimension();
     int dimensionCount = queryDimensions.size();
     int msrCount = queryExecuterProperties.measureAggregators.length;
-    int rowSize = convertedResult[0].length;
-    Object[] row ;
+    Object[] row;
     for (int rowIndex = 0; rowIndex < rowSize; rowIndex++) {
       row = new Object[dimensionCount + msrCount];
       fillDimensionData(convertedResult, queryDimensions, dimensionCount, row, rowIndex);

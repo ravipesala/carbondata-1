@@ -33,7 +33,7 @@ class LocalSQLContext(val hdfsCarbonBasePath: String)
   extends CarbonContext(new SparkContext(new SparkConf()
     .setAppName("CarbonSpark")
     .setMaster("local[2]")
-    .set("spark.sql.carbon.push.computation", "true")), hdfsCarbonBasePath) {
+    .set("spark.sql.carbon.push.computation", "false")), hdfsCarbonBasePath) {
 
 }
 

@@ -36,7 +36,7 @@ object InitForExamples {
   def createCarbonContext(appName: String): CarbonContext = {
     val sc = new SparkContext(new SparkConf()
       .setAppName(appName)
-      .setMaster("local[2]").set("spark.sql.carbon.push.computation", "false"))
+      .setMaster("local[2]"))
     sc.setLogLevel("ERROR")
 
     val cc = new CarbonContext(sc, storeLocation)

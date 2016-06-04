@@ -13,7 +13,6 @@ import org.carbondata.query.carbon.result.BatchRawResult;
 import org.carbondata.query.carbon.result.BatchResult;
 import org.carbondata.query.carbon.result.ListBasedResultWrapper;
 import org.carbondata.query.carbon.result.Result;
-import org.carbondata.query.carbon.wrappers.ByteArrayWrapper;
 
 /**
  * It does not decode the dictionary.
@@ -56,22 +55,23 @@ public class RawQueryResultPreparatorImpl
       Result<List<ListBasedResultWrapper>, Object> scannedResult) {
     if ((null == scannedResult || scannedResult.size() < 1)) {
       BatchRawResult batchRawResult = new BatchRawResult();
-      batchRawResult.setRows(new Object[0][0]);
       batchRawResult.setQuerySchemaInfo(querySchemaInfo);
       return batchRawResult;
     }
     int msrSize = queryExecuterProperties.measureAggregators.length;
-    int totalNumberOfColumn = msrSize + 1;
-    Object[][] resultData = new Object[scannedResult.size()][totalNumberOfColumn];
-    int currentRow = 0;
-    ByteArrayWrapper key;
+    Object[][] resultData = new Object[scannedResult.size()][];
     Object[] value;
+    Object[] row;
+    int counter = 0;
     while (scannedResult.hasNext()) {
-      key = scannedResult.getKey();
       value = scannedResult.getValue();
-      resultData[currentRow][0] = key;
-      System.arraycopy(value, 0, resultData[currentRow], 1, msrSize);
-      currentRow++;
+      row = new Object[msrSize + 1];
+      row[0] = scannedResult.getKey();
+      if(value != null) {
+        System.arraycopy(value, 0, row, 1, msrSize);
+      }
+      resultData[counter] = row;
+      counter ++;
     }
     LOGGER.info("###########################---- Total Number of records" + scannedResult.size());
     BatchRawResult result = new BatchRawResult();
