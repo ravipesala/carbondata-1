@@ -116,7 +116,12 @@ public class BatchRawResult extends BatchResult {
     }
     Object[] orderData = new Object[parsedData.length];
     for (int i = 0; i < parsedData.length; i++) {
-      orderData[i] = parsedData[aggOrder[i]];
+      // this case can come with expressions with out column like count(*)
+      if(i < aggOrder.length) {
+        orderData[i] = parsedData[aggOrder[i]];
+      } else {
+        orderData[i] = parsedData[i];
+      }
     }
     return orderData;
   }
