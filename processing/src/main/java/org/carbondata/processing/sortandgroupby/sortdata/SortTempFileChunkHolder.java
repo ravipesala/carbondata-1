@@ -35,7 +35,6 @@ import org.carbondata.common.logging.LogService;
 import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.constants.CarbonCommonConstants;
 import org.carbondata.core.constants.IgnoreDictionary;
-import org.carbondata.core.util.ByteUtil;
 import org.carbondata.core.util.ByteUtil.UnsafeComparer;
 import org.carbondata.core.util.CarbonProperties;
 import org.carbondata.core.util.CarbonUtil;

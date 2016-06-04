@@ -19,8 +19,6 @@
 
 package org.carbondata.processing.csvreaderstep;
 
-import java.io.InputStream;
-
 import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.trans.step.BaseStepData;
 import org.pentaho.di.trans.step.StepDataInterface;

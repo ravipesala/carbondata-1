@@ -18,8 +18,6 @@
  */
 package org.carbondata.hadoop;
 
-import org.carbondata.core.carbon.path.CarbonTablePath;
-
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 
