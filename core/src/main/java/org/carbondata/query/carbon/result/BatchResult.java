@@ -19,6 +19,8 @@
 
 package org.carbondata.query.carbon.result;
 
+import java.util.NoSuchElementException;
+
 import org.carbondata.core.iterator.CarbonIterator;
 
 /**
@@ -37,7 +39,7 @@ public class BatchResult extends CarbonIterator<Object[]> {
   protected int counter;
 
   public BatchResult() {
-    this.rows = new Object[0][0];
+    this.rows = new Object[0][];
   }
 
   /**
@@ -74,6 +76,9 @@ public class BatchResult extends CarbonIterator<Object[]> {
    * @return the next element in the iteration
    */
   @Override public Object[] next() {
+    if (!hasNext()) {
+      throw new NoSuchElementException();
+    }
     Object[] row = rows[counter];
     counter++;
     return row;

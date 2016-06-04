@@ -57,30 +57,33 @@ public class BatchRawResult extends BatchResult {
   }
 
   private Object[] parseData() {
-    ByteArrayWrapper key = (ByteArrayWrapper) rows[counter][0];
     int[] order = querySchemaInfo.getQueryReverseOrder();
-    long[] surrogateResult = querySchemaInfo.getKeyGenerator()
-        .getKeyArray(key.getDictionaryKey(), querySchemaInfo.getMaskedByteIndexes());
+    Object[] row = rows[counter];
+    ByteArrayWrapper key = (ByteArrayWrapper) row[0];
     QueryDimension[] queryDimensions = querySchemaInfo.getQueryDimensions();
-    Object[] parsedData = new Object[queryDimensions.length + rows[counter].length - 1];
-    int noDictionaryColumnIndex = 0;
-    for (int i = 0; i < queryDimensions.length; i++) {
-      if (!queryDimensions[i].getDimension().hasEncoding(Encoding.DICTIONARY)) {
-        parsedData[order[i]] = DataTypeUtil.getDataBasedOnDataType(
-            new String(key.getNoDictionaryKeyByIndex(noDictionaryColumnIndex++)),
-            queryDimensions[i].getDimension().getDataType());
-      } else if (queryDimensions[i].getDimension().hasEncoding(Encoding.DIRECT_DICTIONARY)) {
-        DirectDictionaryGenerator directDictionaryGenerator = DirectDictionaryKeyGeneratorFactory
-            .getDirectDictionaryGenerator(queryDimensions[i].getDimension().getDataType());
-        parsedData[order[i]] = directDictionaryGenerator.getValueFromSurrogate(
-            (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()]);
-      } else {
-        parsedData[order[i]] =
-            (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()];
+    Object[] parsedData = new Object[queryDimensions.length + row.length - 1];
+    if(key != null) {
+      long[] surrogateResult = querySchemaInfo.getKeyGenerator()
+          .getKeyArray(key.getDictionaryKey(), querySchemaInfo.getMaskedByteIndexes());
+      int noDictionaryColumnIndex = 0;
+      for (int i = 0; i < queryDimensions.length; i++) {
+        if (!queryDimensions[i].getDimension().hasEncoding(Encoding.DICTIONARY)) {
+          parsedData[order[i]] = DataTypeUtil.getDataBasedOnDataType(
+              new String(key.getNoDictionaryKeyByIndex(noDictionaryColumnIndex++)),
+              queryDimensions[i].getDimension().getDataType());
+        } else if (queryDimensions[i].getDimension().hasEncoding(Encoding.DIRECT_DICTIONARY)) {
+          DirectDictionaryGenerator directDictionaryGenerator = DirectDictionaryKeyGeneratorFactory
+              .getDirectDictionaryGenerator(queryDimensions[i].getDimension().getDataType());
+          parsedData[order[i]] = directDictionaryGenerator.getValueFromSurrogate(
+              (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()]);
+        } else {
+          parsedData[order[i]] =
+              (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()];
+        }
       }
     }
-    for (int i = 0; i < rows[counter].length - 1; i++) {
-      parsedData[order[i + queryDimensions.length]] = rows[counter][i + 1];
+    for (int i = 0; i < row.length - 1; i++) {
+      parsedData[order[i + queryDimensions.length]] = row[i + 1];
     }
     counter++;
     return parsedData;

@@ -61,7 +61,7 @@ public class DetailQueryResultIterator extends AbstractDetailQueryResultIterator
   }
 
   @Override public BatchResult next() {
-    updateSliceIndexToBeExecuted();
+    currentCounter += updateSliceIndexToBeExecuted();
     CarbonIterator<Result> result = null;
     try {
       result = executor.executeQuery(blockExecutionInfos, blockIndexToBeExecuted);

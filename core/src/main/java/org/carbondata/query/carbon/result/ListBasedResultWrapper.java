@@ -1,6 +1,5 @@
 package org.carbondata.query.carbon.result;
 
-import org.carbondata.query.aggregator.MeasureAggregator;
 import org.carbondata.query.carbon.wrappers.ByteArrayWrapper;
 
 public class ListBasedResultWrapper {

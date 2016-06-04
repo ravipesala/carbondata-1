@@ -28,8 +28,6 @@ import org.carbondata.common.logging.LogService;
 import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.carbon.metadata.encoder.Encoding;
 import org.carbondata.core.constants.CarbonCommonConstants;
-import org.carbondata.core.keygenerator.directdictionary.DirectDictionaryGenerator;
-import org.carbondata.core.keygenerator.directdictionary.DirectDictionaryKeyGeneratorFactory;
 import org.carbondata.core.util.CarbonUtil;
 import org.carbondata.query.aggregator.MeasureAggregator;
 import org.carbondata.query.aggregator.impl.CountAggregator;
@@ -134,7 +132,6 @@ public class QueryResultPreparatorImpl
   }
 
   private BatchResult getResult(QueryModel queryModel, Object[][] convertedResult) {
-
     Object[][] rows = new Object[convertedResult[0].length][];
     List<QueryDimension> queryDimensions = queryModel.getQueryDimension();
     int dimensionCount = queryDimensions.size();

@@ -45,8 +45,8 @@ import org.carbondata.query.expression.{LiteralExpression => CarbonLiteralExpres
 import org.carbondata.query.expression.arithmetic.{AddExpression, DivideExpression, MultiplyExpression, SubstractExpression}
 import org.carbondata.query.expression.conditional._
 import org.carbondata.query.expression.logical.{AndExpression, OrExpression}
-import org.carbondata.spark.agg._
 import org.carbondata.spark.{Value, ValueImpl}
+import org.carbondata.spark.agg._
 import org.carbondata.spark.rdd.CarbonQueryRDD
 import org.carbondata.spark.util.{CarbonScalaUtil, QueryPlanUtil}
 

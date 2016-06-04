@@ -217,9 +217,7 @@ case class CarbonRawTableScan(
     }
 
     if (useBinaryAggregator) {
-      inputRdd.map { row =>
-        new CarbonRawMutableRow(row.getRows, row.getQuerySchemaInfo)
-      }
+      inputRdd.map (row => new CarbonRawMutableRow(row.getRows, row.getQuerySchemaInfo))
     } else {
       inputRdd.flatMap { row =>
         val buffer = new ArrayBuffer[GenericMutableRow]()
@@ -238,13 +236,14 @@ case class CarbonRawTableScan(
 }
 
 class CarbonRawMutableRow(values: Array[Array[Object]],
-    val schema: QuerySchemaInfo) extends GenericMutableRow(values.asInstanceOf[Array[Any]]) {
+    val schema: QuerySchemaInfo) extends GenericMutableRow {
 
   val dimsLen = schema.getQueryDimensions.length - 1
   val order = schema.getQueryOrder
+  var value: Array[Object] = null
   var counter = 0
 
-  def getKey: ByteArrayWrapper = values(counter).head.asInstanceOf[ByteArrayWrapper]
+  def getKey: ByteArrayWrapper = value.head.asInstanceOf[ByteArrayWrapper]
 
   def parseKey(key: ByteArrayWrapper, aggData: Array[Object], order: Array[Int]): Array[Object] = {
     BatchRawResult.parseData(key, aggData, schema, order)
@@ -255,6 +254,7 @@ class CarbonRawMutableRow(values: Array[Array[Object]],
   }
 
   def next(): Unit = {
+    value = values(counter)
     counter += 1
   }
 
@@ -263,47 +263,47 @@ class CarbonRawMutableRow(values: Array[Array[Object]],
   override def anyNull: Boolean = true
 
   override def get(ordinal: Int, dataType: DataType): AnyRef = {
-    values(counter)(order(ordinal) - dimsLen)
+    value(order(ordinal) - dimsLen)
       .asInstanceOf[AnyRef]
   }
 
   override def getUTF8String(ordinal: Int): UTF8String = {
-    UTF8String.fromString(values(counter)(order(ordinal) - dimsLen).asInstanceOf[String])
+    UTF8String.fromString(value(order(ordinal) - dimsLen).asInstanceOf[String])
   }
 
   override def getDouble(ordinal: Int): Double = {
-    values(counter)(order(ordinal) - dimsLen).asInstanceOf[Double]
+    value(order(ordinal) - dimsLen).asInstanceOf[Double]
   }
 
   override def getFloat(ordinal: Int): Float = {
-    values(counter)(order(ordinal) - dimsLen).asInstanceOf[Float]
+    value(order(ordinal) - dimsLen).asInstanceOf[Float]
   }
 
   override def getLong(ordinal: Int): Long = {
-    values(counter)(order(ordinal) - dimsLen).asInstanceOf[Long]
+    value(order(ordinal) - dimsLen).asInstanceOf[Long]
   }
 
   override def getByte(ordinal: Int): Byte = {
-    values(counter)(order(ordinal) - dimsLen).asInstanceOf[Byte]
+    value(order(ordinal) - dimsLen).asInstanceOf[Byte]
   }
 
   override def getDecimal(ordinal: Int,
       precision: Int,
       scale: Int): Decimal = {
-    values(counter)(order(ordinal) - dimsLen).asInstanceOf[Decimal]
+    value(order(ordinal) - dimsLen).asInstanceOf[Decimal]
   }
 
   override def getBoolean(ordinal: Int): Boolean = {
-    values(counter)(order(ordinal) - dimsLen).asInstanceOf[Boolean]
+    value(order(ordinal) - dimsLen).asInstanceOf[Boolean]
   }
 
   override def getShort(ordinal: Int): Short = {
-    values(counter)(order(ordinal) - dimsLen).asInstanceOf[Short]
+    value(order(ordinal) - dimsLen).asInstanceOf[Short]
   }
 
   override def getInt(ordinal: Int): Int = {
-    values(counter)(order(ordinal) - dimsLen).asInstanceOf[Int]
+    value(order(ordinal) - dimsLen).asInstanceOf[Int]
   }
 
-  override def isNullAt(ordinal: Int): Boolean = values(counter)(order(ordinal) - dimsLen) == null
+  override def isNullAt(ordinal: Int): Boolean = value(order(ordinal) - dimsLen) == null
 }
