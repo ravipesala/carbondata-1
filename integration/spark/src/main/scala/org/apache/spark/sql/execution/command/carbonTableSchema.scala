@@ -1772,7 +1772,7 @@ private[sql] case class DropCubeCommand(ifExistsSet: Boolean, schemaNameOp: Opti
               CarbonUtil.deleteFoldersAndFiles(file.getParentFile)
             }
             // delete bad record log after drop cube
-            val badLogPath = CarbonUtil.getBadLogPath(dbName +  File.separator + cubeName)
+            val badLogPath = CarbonUtil.getBadLogPath(dbName +  File.separator + tableName)
             val badLogFileType = FileFactory.getFileType(badLogPath)
             if (FileFactory.isFileExist(badLogPath, badLogFileType)) {
               val file = FileFactory.getCarbonFile(badLogPath, badLogFileType)
