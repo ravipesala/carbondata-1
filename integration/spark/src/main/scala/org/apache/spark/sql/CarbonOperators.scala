@@ -25,10 +25,14 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.agg.{CarbonAverage, CarbonCount}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Max, Min, Sum}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.execution.LeafNode
 import org.apache.spark.sql.hive.CarbonMetastoreCatalog
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
 import org.carbondata.common.logging.LogServiceFactory
@@ -36,19 +40,20 @@ import org.carbondata.core.carbon.{AbsoluteTableIdentifier}
 import org.carbondata.core.constants.CarbonCommonConstants
 import org.carbondata.core.util.CarbonProperties
 import org.carbondata.hadoop.CarbonInputFormat
-import org.carbondata.query.aggregator.impl.CountAggregator
+import org.carbondata.query.aggregator.MeasureAggregator
+import org.carbondata.query.aggregator.impl.avg.AbstractAvgAggregator
+import org.carbondata.query.aggregator.impl.count.CountAggregator
+import org.carbondata.query.aggregator.impl.max.{MaxAggregator, MaxBigDecimalAggregator, MaxLongAggregator}
+import org.carbondata.query.aggregator.impl.min.{MinAggregator, MinBigDecimalAggregator, MinLongAggregator}
+import org.carbondata.query.aggregator.impl.sum.{SumBigDecimalAggregator, SumDoubleAggregator, SumLongAggregator}
 import org.carbondata.query.carbon.model.{CarbonQueryPlan, QueryDimension, QueryMeasure, QueryModel, SortOrderType}
 import org.carbondata.query.carbon.result.RowResult
-import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression}
-import org.carbondata.query.expression.{Expression => CarbonExpression}
-import org.carbondata.query.expression.{LiteralExpression => CarbonLiteralExpression}
+import org.carbondata.query.expression.{ColumnExpression => CarbonColumnExpression, Expression => CarbonExpression, LiteralExpression => CarbonLiteralExpression}
 import org.carbondata.query.expression.arithmetic.{AddExpression, DivideExpression, MultiplyExpression, SubstractExpression}
 import org.carbondata.query.expression.conditional._
 import org.carbondata.query.expression.logical.{AndExpression, OrExpression}
 import org.carbondata.query.scanner.impl.{CarbonKey, CarbonValue}
-import org.carbondata.spark.agg._
-import org.carbondata.spark.KeyVal
-import org.carbondata.spark.KeyValImpl
+import org.carbondata.spark.{KeyVal, KeyValImpl}
 import org.carbondata.spark.rdd.CarbonQueryRDD
 import org.carbondata.spark.util.{CarbonScalaUtil, QueryPlanUtil}
 
@@ -70,14 +75,14 @@ case class CarbonTableScan(
   var outputColumns = scala.collection.mutable.MutableList[Attribute]()
   var extraPreds: Seq[Expression] = Nil
   val allDims = new scala.collection.mutable.HashSet[String]()
-  // val carbonTable = CarbonMetadata.getInstance().getCarbonTable(cubeName)
   @transient val carbonCatalog = sqlContext.catalog.asInstanceOf[CarbonMetastoreCatalog]
 
-  def processAggregateExpr(plan: CarbonQueryPlan, currentAggregate: AggregateExpression1,
+  def processAggregateExpr(plan: CarbonQueryPlan,
+      currentAggregate: AggregateExpression,
       queryOrder: Int): Int = {
-
     currentAggregate match {
-      case SumCarbon(posLiteral@PositionLiteral(attr: AttributeReference, _), _) =>
+      case AggregateExpression(Sum(attr: AttributeReference), _, false) =>
+        outputColumns += attr
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.nonEmpty) {
           val m1 = new QueryMeasure(attr.name)
@@ -92,10 +97,10 @@ case class CarbonTableScan(
             plan.addAggDimAggInfo(d1.getColumnName, "sum", d1.getQueryOrder)
           }
         }
-        posLiteral.setPosition(queryOrder)
         queryOrder + 1
 
-      case CountCarbon(posLiteral@PositionLiteral(attr: AttributeReference, _)) =>
+      case AggregateExpression(CarbonCount(attr: AttributeReference, None), _, false) =>
+        outputColumns += attr
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.nonEmpty) {
           val m1 = new QueryMeasure(attr.name)
@@ -110,47 +115,20 @@ case class CarbonTableScan(
             plan.addAggDimAggInfo(d1.getColumnName, "count", d1.getQueryOrder)
           }
         }
-        posLiteral.setPosition(queryOrder)
         queryOrder + 1
 
-      case CountCarbon(posLiteral@PositionLiteral(Literal(star, _), _)) if star == "*" =>
+      case AggregateExpression(CarbonCount(lt: Literal, Some(attr: AttributeReference)), _, false)
+        if lt.value == "*" || lt.value == 1 =>
+        outputColumns += attr
         val m1 = new QueryMeasure("count(*)")
         m1.setAggregateFunction(CarbonCommonConstants.COUNT)
         m1.setQueryOrder(queryOrder)
-        posLiteral.setPosition(queryOrder)
         plan.addMeasure(m1)
         plan.setCountStartQuery(true)
-        posLiteral.setPosition(queryOrder)
         queryOrder + 1
 
-      case curr@CountCarbon(posLiteral@PositionLiteral(one, _)) =>
-        val m1 = new QueryMeasure("count(*)")
-        m1.setAggregateFunction(CarbonCommonConstants.COUNT)
-        m1.setQueryOrder(queryOrder)
-        posLiteral.setPosition(queryOrder)
-        plan.addMeasure(m1)
-        plan.setCountStartQuery(true)
-        posLiteral.setPosition(queryOrder)
-        queryOrder + 1
-      case CountDistinctCarbon(posLiteral@PositionLiteral(attr: AttributeReference, _)) =>
-        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-        if (msrs.nonEmpty) {
-          val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.DISTINCT_COUNT)
-          m1.setQueryOrder(queryOrder)
-          plan.addMeasure(m1)
-        } else {
-          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-          if (dims.nonEmpty) {
-            val d1 = new QueryDimension(attr.name)
-            d1.setQueryOrder(queryOrder)
-            plan.addAggDimAggInfo(d1.getColumnName, "distinct-count", d1.getQueryOrder)
-          }
-        }
-        posLiteral.setPosition(queryOrder)
-        queryOrder + 1
-
-      case AverageCarbon(posLiteral@PositionLiteral(attr: AttributeReference, _), _) =>
+      case AggregateExpression(CarbonAverage(attr: AttributeReference), _, false) =>
+        outputColumns += attr
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.nonEmpty) {
           val m1 = new QueryMeasure(attr.name)
@@ -165,10 +143,10 @@ case class CarbonTableScan(
             plan.addAggDimAggInfo(d1.getColumnName, "avg", d1.getQueryOrder)
           }
         }
-        posLiteral.setPosition(queryOrder)
         queryOrder + 1
 
-      case MinCarbon(posLiteral@PositionLiteral(attr: AttributeReference, _), _) =>
+      case AggregateExpression(Min(attr: AttributeReference), _, false) =>
+        outputColumns += attr
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.nonEmpty) {
           val m1 = new QueryMeasure(attr.name)
@@ -183,10 +161,10 @@ case class CarbonTableScan(
             plan.addAggDimAggInfo(d1.getColumnName, "min", d1.getQueryOrder)
           }
         }
-        posLiteral.setPosition(queryOrder)
         queryOrder + 1
 
-      case MaxCarbon(posLiteral@PositionLiteral(attr: AttributeReference, _), _) =>
+      case AggregateExpression(Max(attr: AttributeReference), _, false) =>
+        outputColumns += attr
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.nonEmpty) {
           val m1 = new QueryMeasure(attr.name)
@@ -201,26 +179,7 @@ case class CarbonTableScan(
             plan.addAggDimAggInfo(d1.getColumnName, "max", d1.getQueryOrder)
           }
         }
-        posLiteral.setPosition(queryOrder)
-        queryOrder + 1
-
-      case SumDistinctCarbon(posLiteral@PositionLiteral(attr: AttributeReference, _), _) =>
-        val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-        if (msrs.nonEmpty) {
-          val m1 = new QueryMeasure(attr.name)
-          m1.setAggregateFunction(CarbonCommonConstants.SUM_DISTINCT)
-          m1.setQueryOrder(queryOrder)
-          plan.addMeasure(m1)
-        } else {
-          val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-          if (dims != null) {
-            //            plan.removeDimensionFromDimList(dims(0));
-            val d1 = new QueryDimension(attr.name)
-            d1.setQueryOrder(queryOrder)
-            plan.addAggDimAggInfo(d1.getColumnName, "sum-distinct", queryOrder)
-          }
-        }
-        posLiteral.setPosition(queryOrder)
+//        posLiteral.setPosition(queryOrder)
         queryOrder + 1
 
       case _ => throw new
@@ -291,11 +250,8 @@ case class CarbonTableScan(
               }
             }
             outputColumns += attr
-          case par: Alias if par.children.head.isInstanceOf[AggregateExpression1] =>
-            outputColumns += par.toAttribute
-            queryOrder = processAggregateExpr(plan,
-              par.children.head.asInstanceOf[AggregateExpression1], queryOrder)
-
+          case Alias(agg: AggregateExpression, name) =>
+            queryOrder = processAggregateExpr(plan, agg, queryOrder)
           case _ => forceDetailedQuery = true
         }
       case _ => forceDetailedQuery = true
@@ -322,16 +278,13 @@ case class CarbonTableScan(
     sortExprs match {
       case Some(a: Seq[SortOrder]) =>
         a.foreach {
-          case SortOrder(SumCarbon(attr: AttributeReference, _), order) => plan.getMeasures
+          case SortOrder(Sum(attr: AttributeReference), order) => plan.getMeasures
             .asScala.filter(m => m.getColumnName.equalsIgnoreCase(attr.name)).head
             .setSortOrder(getSortDirection(order))
-          case SortOrder(CountCarbon(attr: AttributeReference), order) => plan.getMeasures
+          case SortOrder(CarbonCount(attr: AttributeReference, _), order) => plan.getMeasures
             .asScala.filter(m => m.getColumnName.equalsIgnoreCase(attr.name)).head
             .setSortOrder(getSortDirection(order))
-          case SortOrder(CountDistinctCarbon(attr: AttributeReference), order) => plan.getMeasures
-            .asScala.filter(m => m.getColumnName.equalsIgnoreCase(attr.name)).head
-            .setSortOrder(getSortDirection(order))
-          case SortOrder(AverageCarbon(attr: AttributeReference, _), order) => plan.getMeasures
+          case SortOrder(CarbonAverage(attr: AttributeReference), order) => plan.getMeasures
             .asScala.filter(m => m.getColumnName.equalsIgnoreCase(attr.name)).head
             .setSortOrder(getSortDirection(order))
           case SortOrder(attr: AttributeReference, order) =>
@@ -476,7 +429,7 @@ case class CarbonTableScan(
   def inputRdd: CarbonQueryRDD[CarbonKey, CarbonValue] = {
     val LOG = LogServiceFactory.getLogService(this.getClass.getCanonicalName)
     // Update the FilterExpressions with extra conditions added through join pushdown
-    if (extraPreds.nonEmpty) {
+    if (extraPreds.nonEmpty) {attributes
       val exps = preProcessExpressions(extraPreds)
       val expressionVal = transformExpression(exps.head)
       val oldExpressionVal = buildCarbonPlan.getFilterExpression
@@ -518,6 +471,23 @@ case class CarbonTableScan(
     def toType(obj: Any): Any = {
       obj match {
         case s: String => UTF8String.fromString(s)
+        case avg: AbstractAvgAggregator =>
+          if (avg.isFirstTime) {
+            null
+          } else {
+            new GenericArrayData(avg.getAvgState.asInstanceOf[Array[Any]])
+          }
+        case c: CountAggregator => c.getLongValue
+        case s: SumDoubleAggregator => s.getDoubleValue
+        case s: SumBigDecimalAggregator => Decimal(s.getBigDecimalValue)
+        case s: SumLongAggregator => s.getLongValue
+        case m: MaxBigDecimalAggregator => Decimal(m.getBigDecimalValue)
+        case m: MaxLongAggregator => m.getLongValue
+        case m: MaxAggregator => toType(m.getValueObject)
+        case m: MinBigDecimalAggregator => Decimal(m.getBigDecimalValue)
+        case m: MinLongAggregator => m.getLongValue
+        case m: MinAggregator => toType(m.getValueObject)
+        case m: MeasureAggregator => toType(m.getValueObject)
         case _ => obj
       }
     }
@@ -531,7 +501,7 @@ case class CarbonTableScan(
       val countAgg = new CountAggregator()
       countAgg.setNewValue(rowCount)
       sparkContext.parallelize(
-        Seq(new GenericMutableRow(Seq(countAgg).toArray.asInstanceOf[Array[Any]]))
+        Seq(new GenericMutableRow(Seq(countAgg.getLongValue).toArray.asInstanceOf[Array[Any]]))
       )
     } else {
       // all the other queries are sent to executor
@@ -544,7 +514,7 @@ case class CarbonTableScan(
   }
 
   /**
-   * return true if query is count query
+   * return true if query is count queryUtils
    * @return
    */
   def isCountQuery: Boolean = {

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.util
 import java.util.ArrayList
 
 import scala.collection.JavaConverters._
@@ -27,6 +26,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.execution.LeafNode
 import org.apache.spark.sql.hive.CarbonMetastoreCatalog
 import org.apache.spark.sql.types.{DataType, Decimal}
@@ -54,7 +54,7 @@ case class CarbonRawTableScan(
   val selectedMsrs = scala.collection.mutable.MutableList[QueryMeasure]()
   @transient val carbonCatalog = ocRaw.catalog.asInstanceOf[CarbonMetastoreCatalog]
 
-  val attributesNeedToDecode = new util.HashSet[AttributeReference]()
+  val attributesNeedToDecode = new java.util.HashSet[AttributeReference]()
   val unprocessedExprs = new ArrayBuffer[Expression]()
 
   val buildCarbonPlan: CarbonQueryPlan = {
@@ -104,7 +104,7 @@ case class CarbonRawTableScan(
     aggExprsRaw match {
       case Some(aggExprs) =>
         aggExprs.foreach {
-          case Alias(agg: AggregateExpression1, name) =>
+          case Alias(agg: AggregateExpression, name) =>
             agg.collect {
               case attr: AttributeReference =>
                 val dims = selectedDims.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))

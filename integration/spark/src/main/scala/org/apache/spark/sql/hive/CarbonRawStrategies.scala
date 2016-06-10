@@ -63,66 +63,8 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
               detailQuery = true,
               useBinaryAggregation = false)(sqlContext)._1 :: Nil
           }
-
-        case catalyst.planning.PartialAggregation(
-        namedGroupingAttributes,
-        rewrittenAggregateExpressions,
-        groupingExpressions,
-        partialComputation,
-        PhysicalOperation(projectList, predicates,
-        l@LogicalRelation(carbonRelation: CarbonDatasourceRelation, _))) =>
-          handleRawAggregation(plan, plan, projectList, predicates, carbonRelation,
-            l, partialComputation, groupingExpressions, namedGroupingAttributes,
-            rewrittenAggregateExpressions)
-        case CarbonDictionaryCatalystDecoder(relations, profile,
-               aliasMap, _, child) =>
-          CarbonDictionaryDecoder(relations,
-            profile,
-            aliasMap,
-            planLater(child))(sqlContext) :: Nil
         case _ =>
           Nil
-      }
-    }
-
-
-    def handleRawAggregation(plan: LogicalPlan,
-        aggPlan: LogicalPlan,
-        projectList: Seq[NamedExpression],
-        predicates: Seq[Expression],
-        carbonRelation: CarbonDatasourceRelation,
-        logicalRelation: LogicalRelation,
-        partialComputation: Seq[NamedExpression],
-        groupingExpressions: Seq[Expression],
-        namedGroupingAttributes: Seq[Attribute],
-        rewrittenAggregateExpressions: Seq[NamedExpression]):
-    Seq[SparkPlan] = {
-      val groupByPresentOnMsr = isGroupByPresentOnMeasures(groupingExpressions,
-        carbonRelation.carbonRelation.metaData.carbonTable)
-      if(!groupByPresentOnMsr) {
-        val s = carbonRawScan(projectList,
-          predicates,
-          carbonRelation,
-          logicalRelation,
-          Some(partialComputation),
-          detailQuery = false,
-          useBinaryAggregation = true)(sqlContext)
-        // If any aggregate function present on dimnesions then don't use this plan.
-        if (!s._2) {
-          CarbonAggregate(
-            partial = false,
-            namedGroupingAttributes,
-            rewrittenAggregateExpressions,
-            CarbonRawAggregate(
-              partial = true,
-              groupingExpressions,
-              partialComputation,
-              s._1))(sqlContext) :: Nil
-        } else {
-          Nil
-        }
-      } else {
-        Nil
       }
     }
 
