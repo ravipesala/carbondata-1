@@ -27,16 +27,16 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.agg.{CarbonAverage, CarbonCount}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, _}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Max, Min, Sum}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.execution.LeafNode
 import org.apache.spark.sql.hive.CarbonMetastoreCatalog
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.types.UTF8String
 
 import org.carbondata.common.logging.LogServiceFactory
-import org.carbondata.core.carbon.{AbsoluteTableIdentifier}
+import org.carbondata.core.carbon.AbsoluteTableIdentifier
 import org.carbondata.core.constants.CarbonCommonConstants
 import org.carbondata.core.util.CarbonProperties
 import org.carbondata.hadoop.CarbonInputFormat
@@ -220,41 +220,46 @@ case class CarbonTableScan(
     // expressions. All single column & known aggregate expressions will use native aggregates for
     // measure and dimensions
     // Unknown aggregates & Expressions will use custom aggregator
+
     aggExprs match {
       case Some(a: Seq[Expression]) if !forceDetailedQuery =>
         a.foreach {
           case attr@AttributeReference(_, _, _, _) => // Add all the references to carbon query
-            val carbonDimension = selectedDims
-              .filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-            if (carbonDimension.nonEmpty) {
-              val dim = new QueryDimension(attr.name)
-              dim.setQueryOrder(queryOrder)
-              plan.addDimension(dim)
-              queryOrder = queryOrder + 1
-            } else {
-              val carbonMeasure = selectedMsrs
-                .filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
-              if (carbonMeasure.nonEmpty) {
-                // added by vishal as we are adding for dimension so need to add to measure list
-                // Carbon does not support group by on measure column so throwing exception to
-                // make it detail query
-                throw new
-                    Exception("Some Aggregate functions cannot be pushed, force to detailequery")
-              }
-              else {
-                // Some unknown attribute name is found. this may be a derived column.
-                // So, let's fall back to detailed query flow
-                throw new Exception(
-                  "Some attributes referred looks derived columns. So, force to detailequery " +
-                  attr.name)
-              }
-            }
+            addCarbonColumn(attr)
             outputColumns += attr
           case Alias(agg: AggregateExpression, name) =>
             queryOrder = processAggregateExpr(plan, agg, queryOrder)
           case _ => forceDetailedQuery = true
         }
       case _ => forceDetailedQuery = true
+    }
+
+    def addCarbonColumn(attr: Attribute): Unit = {
+      val carbonDimension = selectedDims
+        .filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+      if (carbonDimension.nonEmpty) {
+        val dim = new QueryDimension(attr.name)
+        dim.setQueryOrder(queryOrder)
+        plan.addDimension(dim)
+        queryOrder = queryOrder + 1
+      } else {
+        val carbonMeasure = selectedMsrs
+          .filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
+        if (carbonMeasure.nonEmpty) {
+          // added by vishal as we are adding for dimension so need to add to measure list
+          // Carbon does not support group by on measure column so throwing exception to
+          // make it detail query
+          throw new
+              Exception("Some Aggregate functions cannot be pushed, force to detailequery")
+        }
+        else {
+          // Some unknown attribute name is found. this may be a derived column.
+          // So, let's fall back to detailed query flow
+          throw new Exception(
+            "Some attributes referred looks derived columns. So, force to detailequery " +
+            attr.name)
+        }
+      }
     }
 
     if (forceDetailedQuery) {
@@ -269,6 +274,12 @@ case class CarbonTableScan(
       selectedMsrs.foreach(plan.addMeasure)
     }
     else {
+      attributes.foreach { attr =>
+        if(!outputColumns.exists(_.name.equals(attr))) {
+          addCarbonColumn(attr)
+          outputColumns += attr
+        }
+      }
       attributes = outputColumns
     }
 
@@ -467,6 +478,9 @@ case class CarbonTableScan(
     big
   }
 
+
+  override def outputsUnsafeRows: Boolean = false
+
   def doExecute(): RDD[InternalRow] = {
     def toType(obj: Any): Any = {
       obj match {
@@ -491,6 +505,8 @@ case class CarbonTableScan(
         case _ => obj
       }
     }
+
+//    val unsafeProjection = UnsafeProjection.create(attributes.map(_.dataType).toArray)
     // count(*) query executed in driver by querying from Btree
     if (isCountQuery) {
       val absoluteTableIdentifier = carbonTable.getAbsoluteTableIdentifier
@@ -505,16 +521,22 @@ case class CarbonTableScan(
       )
     } else {
       // all the other queries are sent to executor
-      inputRdd.map { row =>
-        val dims = row._1.getKey.map(toType)
-        val values = dims
-        new GenericMutableRow(values.asInstanceOf[Array[Any]])
+      inputRdd.mapPartitions { iter =>
+        new Iterator[InternalRow] {
+//          val unsafeProjection = UnsafeProjection.create(attributes.map(_.dataType).toArray)
+          override def hasNext: Boolean = iter.hasNext
+
+          override def next(): InternalRow = {
+            new GenericMutableRow(iter.next()._1.getKey.map(toType))
+          }
+        }
       }
     }
   }
 
   /**
    * return true if query is count queryUtils
+ *
    * @return
    */
   def isCountQuery: Boolean = {
@@ -530,6 +552,5 @@ case class CarbonTableScan(
   def output: Seq[Attribute] = {
     attributes
   }
-
 }
 

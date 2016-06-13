@@ -420,8 +420,8 @@ object CarbonAggregation {
     if (!convertUnknown && canBeConverted(current)) {
       current.transform {
         case a@Average(attr: AttributeReference) => CarbonAverage(transformArrayType(attr))
-        case a@Count(Seq(s: Literal)) => CarbonCount(s, Some(Cast(oneAttr, LongType)))
-        case a@Count(Seq(attr: AttributeReference)) => CarbonCount(Cast(attr, LongType))
+        case a@Count(Seq(s: Literal)) => CarbonCount(s, Some(transformLongType(oneAttr)))
+        case a@Count(Seq(attr: AttributeReference)) => CarbonCount(transformLongType(attr))
       }
     } else {
       current
@@ -429,14 +429,19 @@ object CarbonAggregation {
   }
 
   def canBeConverted(current: Expression): Boolean = current match {
-    case Alias(AggregateExpression(a@Average(attr: AttributeReference), _, _), _) => true
-    case Alias(AggregateExpression(a@Count(Seq(s: Literal)), _, _), _) => true
-    case Alias(AggregateExpression(a@Count(Seq(attr: AttributeReference)), _, _), _) => true
+    case Alias(AggregateExpression(a@Average(attr: AttributeReference), _, false), _) => true
+    case Alias(AggregateExpression(a@Count(Seq(s: Literal)), _, false), _) => true
+    case Alias(AggregateExpression(a@Count(Seq(attr: AttributeReference)), _, false), _) => true
     case _ => false
   }
 
   def transformArrayType(attr: AttributeReference): AttributeReference = {
     AttributeReference(attr.name, ArrayType(DoubleType), attr.nullable, attr.metadata)(attr.exprId,
+      attr.qualifiers)
+  }
+
+  def transformLongType(attr: AttributeReference): AttributeReference = {
+    AttributeReference(attr.name, LongType, attr.nullable, attr.metadata)(attr.exprId,
       attr.qualifiers)
   }
 

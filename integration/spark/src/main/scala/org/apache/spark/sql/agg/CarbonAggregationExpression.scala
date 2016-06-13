@@ -19,7 +19,7 @@ package org.apache.spark.sql.agg
 
 import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, Expression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 
 case class CarbonAvgHelperExpression(
@@ -31,11 +31,11 @@ case class CarbonAvgHelperExpression(
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val left = input1 match {
-      case g: GenericArrayData => g.getDouble(index)
+      case g: ArrayData => g.getDouble(index)
       case others => others.toString.toDouble
     }
     val right = input2 match {
-      case g: GenericArrayData => g.getDouble(index)
+      case g: ArrayData => g.getDouble(index)
       case others => others.toString.toDouble
     }
     if (index == 1) {
