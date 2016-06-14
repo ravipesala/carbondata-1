@@ -23,7 +23,7 @@ import org.apache.spark.sql.agg.{CarbonAverage, CarbonCount}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Average, Count}
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{UnaryNode, _}
 import org.apache.spark.sql.execution.command.tableModel
@@ -397,14 +397,18 @@ object CarbonAggregation {
   private def convertAggregatesForPushdown(convertUnknown: Boolean,
       rewrittenAggregateExpressions: Seq[Expression],
       oneAttr: AttributeReference) = {
-    var counter: Int = 0
-    var updatedExpressions = MutableList[Expression]()
-    rewrittenAggregateExpressions.foreach(v => {
-      val updated = convertAggregate(v, counter, convertUnknown, oneAttr)
-      updatedExpressions += updated
-      counter = counter + 1
-    })
-    updatedExpressions
+    if (canBeConvertedToCarbonAggregate(rewrittenAggregateExpressions)) {
+      var counter: Int = 0
+      var updatedExpressions = MutableList[Expression]()
+      rewrittenAggregateExpressions.foreach(v => {
+        val updated = convertAggregate(v, counter, convertUnknown, oneAttr)
+        updatedExpressions += updated
+        counter = counter + 1
+      })
+      updatedExpressions
+    } else {
+      rewrittenAggregateExpressions
+    }
   }
 
   def makePositionLiteral(expr: Expression, index: Int, dataType: DataType): PositionLiteral = {
@@ -419,9 +423,16 @@ object CarbonAggregation {
       oneAttr: AttributeReference): Expression = {
     if (!convertUnknown && canBeConverted(current)) {
       current.transform {
-        case a@Average(attr: AttributeReference) => CarbonAverage(transformArrayType(attr))
-        case a@Count(Seq(s: Literal)) => CarbonCount(s, Some(transformLongType(oneAttr)))
-        case a@Count(Seq(attr: AttributeReference)) => CarbonCount(transformLongType(attr))
+        case Average(attr: AttributeReference) =>
+          val convertedDataType = transformArrayType(attr)
+          CarbonAverage(makePositionLiteral(convertedDataType, index, convertedDataType.dataType))
+        case Count(Seq(s: Literal)) =>
+          CarbonCount(s, Some(makePositionLiteral(transformLongType(oneAttr), index, LongType)))
+        case Count(Seq(attr: AttributeReference)) =>
+          CarbonCount(makePositionLiteral(transformLongType(attr), index, LongType))
+        case Sum(attr: AttributeReference) => Sum(makePositionLiteral(attr, index, attr.dataType))
+        case Min(attr: AttributeReference) => Min(makePositionLiteral(attr, index, attr.dataType))
+        case Max(attr: AttributeReference) => Max(makePositionLiteral(attr, index, attr.dataType))
       }
     } else {
       current
@@ -429,9 +440,12 @@ object CarbonAggregation {
   }
 
   def canBeConverted(current: Expression): Boolean = current match {
-    case Alias(AggregateExpression(a@Average(attr: AttributeReference), _, false), _) => true
-    case Alias(AggregateExpression(a@Count(Seq(s: Literal)), _, false), _) => true
-    case Alias(AggregateExpression(a@Count(Seq(attr: AttributeReference)), _, false), _) => true
+    case Alias(AggregateExpression(Average(attr: AttributeReference), _, false), _) => true
+    case Alias(AggregateExpression(Count(Seq(s: Literal)), _, false), _) => true
+    case Alias(AggregateExpression(Count(Seq(attr: AttributeReference)), _, false), _) => true
+    case Alias(AggregateExpression(Sum(attr: AttributeReference), _, false), _) => true
+    case Alias(AggregateExpression(Min(attr: AttributeReference), _, false), _) => true
+    case Alias(AggregateExpression(Max(attr: AttributeReference), _, false), _) => true
     case _ => false
   }
 
@@ -443,6 +457,19 @@ object CarbonAggregation {
   def transformLongType(attr: AttributeReference): AttributeReference = {
     AttributeReference(attr.name, LongType, attr.nullable, attr.metadata)(attr.exprId,
       attr.qualifiers)
+  }
+
+  /**
+   * There should be sync between carbonOperators validation and here. we should not convert to
+   * carbon aggregates if the validation does not satisfy.
+   */
+  def canBeConvertedToCarbonAggregate(expressions: Seq[Expression]): Boolean = {
+    val detailQuery = expressions.map {
+      case attr@AttributeReference(_, _, _, _) => true
+      case Alias(agg: AggregateExpression, name) => true
+      case _ => false
+    }.exists(!_)
+    !detailQuery
   }
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = unapply((plan, false))

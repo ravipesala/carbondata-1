@@ -32,13 +32,13 @@ import org.apache.spark.sql.hive.CarbonMetastoreCatalog
 import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.types.UTF8String
 
-import org.carbondata.core.carbon.{AbsoluteTableIdentifier}
+import org.carbondata.core.carbon.AbsoluteTableIdentifier
 import org.carbondata.core.constants.CarbonCommonConstants
 import org.carbondata.core.util.CarbonProperties
 import org.carbondata.query.carbon.model._
 import org.carbondata.query.carbon.result.BatchRawResult
 import org.carbondata.query.carbon.wrappers.ByteArrayWrapper
-import org.carbondata.spark.{CarbonFilters, RawKeyVal, RawKeyValImpl}
+import org.carbondata.spark.{CarbonFilters, RawKey, RawKeyImpl, RawKeyVal, RawKeyValImpl}
 import org.carbondata.spark.rdd.CarbonRawQueryRDD
 
 
@@ -64,7 +64,7 @@ case class CarbonRawTableScan(
     val measures = carbonTable.getMeasureByTableName(carbonTable.getFactTableName)
     val dimAttr = new Array[Attribute](dimensions.size())
     val msrAttr = new Array[Attribute](measures.size())
-    attributesRaw.map { attr =>
+    attributesRaw.foreach { attr =>
       val carbonDimension =
         carbonTable.getDimensionByName(carbonTable.getFactTableName, attr.name)
       if(carbonDimension != null) {
@@ -78,10 +78,10 @@ case class CarbonRawTableScan(
       }
     }
 
-    attributesRaw = (dimAttr.filter(f => f != null)) ++ (msrAttr.filter(f => f != null))
+    attributesRaw = dimAttr.filter(f => f != null) ++ msrAttr.filter(f => f != null)
 
     var queryOrder: Integer = 0
-    attributesRaw.map { attr =>
+    attributesRaw.foreach { attr =>
         val carbonDimension =
           carbonTable.getDimensionByName(carbonTable.getFactTableName, attr.name)
         if (carbonDimension != null) {
@@ -136,8 +136,11 @@ case class CarbonRawTableScan(
 
   def processFilterExpressions(plan: CarbonQueryPlan) {
     if (dimensionPredicatesRaw.nonEmpty) {
-      val expressionVal = CarbonFilters
-        .processExpression(dimensionPredicatesRaw, attributesNeedToDecode, unprocessedExprs)
+      val expressionVal = CarbonFilters.processExpression(
+        dimensionPredicatesRaw,
+        attributesNeedToDecode,
+        unprocessedExprs,
+        carbonTable)
       expressionVal match {
         case Some(ce) =>
           // adding dimension used in expression in querystats
@@ -181,14 +184,14 @@ case class CarbonRawTableScan(
   }
 
 
-  def inputRdd: CarbonRawQueryRDD[BatchRawResult, Any] = {
+  def inputRdd: CarbonRawQueryRDD[Array[Any], Any] = {
 
     val conf = new Configuration()
     val absoluteTableIdentifier = carbonTable.getAbsoluteTableIdentifier
     buildCarbonPlan.getDimAggregatorInfos.clear()
     val model = QueryModel.createModel(
       absoluteTableIdentifier, buildCarbonPlan, carbonTable)
-    val kv: RawKeyVal[BatchRawResult, Any] = new RawKeyValImpl()
+    val kv: RawKey[Array[Any], Any] = new RawKeyImpl()
     // setting queryid
     buildCarbonPlan.setQueryId(ocRaw.getConf("queryId", System.nanoTime() + ""))
 
@@ -208,6 +211,9 @@ case class CarbonRawTableScan(
     big
   }
 
+
+  override def outputsUnsafeRows: Boolean = attributesNeedToDecode.size() == 0
+
   override def doExecute(): RDD[InternalRow] = {
     def toType(obj: Any): Any = {
       obj match {
@@ -215,19 +221,18 @@ case class CarbonRawTableScan(
         case _ => obj
       }
     }
+    val outUnsafeRows: Boolean = attributesNeedToDecode.size() == 0
+    inputRdd.mapPartitions { iter =>
+      val unsafeProjection = UnsafeProjection.create(output.map(_.dataType).toArray)
+      new Iterator[InternalRow] {
+        override def hasNext: Boolean = iter.hasNext
 
-    if (useBinaryAggregator) {
-      inputRdd.map { row =>
-        //      val dims = row._1.map(toType)
-        new CarbonRawMutableRow(row._1.getAllRows, row._1.getQuerySchemaInfo)
-      }
-    } else {
-      inputRdd.flatMap { row =>
-        val buffer = new ArrayBuffer[GenericMutableRow]()
-        while (row._1.hasNext) {
-          buffer += new GenericMutableRow(row._1.next().map(toType))
-        }
-        buffer
+        override def next(): InternalRow =
+          if (outUnsafeRows) {
+            unsafeProjection(new GenericMutableRow(iter.next()._1.map(toType)))
+          } else {
+            new GenericMutableRow(iter.next()._1.map(toType))
+          }
       }
     }
   }

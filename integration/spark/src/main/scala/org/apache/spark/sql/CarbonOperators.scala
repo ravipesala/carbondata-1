@@ -79,10 +79,10 @@ case class CarbonTableScan(
 
   def processAggregateExpr(plan: CarbonQueryPlan,
       currentAggregate: AggregateExpression,
-      queryOrder: Int): Int = {
+      queryOrder: Int,
+      aggCount: Int): Int = {
     currentAggregate match {
-      case AggregateExpression(Sum(attr: AttributeReference), _, false) =>
-        outputColumns += attr
+      case AggregateExpression(Sum(p@PositionLiteral(attr: AttributeReference, _)), _, false) =>
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.nonEmpty) {
           val m1 = new QueryMeasure(attr.name)
@@ -97,10 +97,11 @@ case class CarbonTableScan(
             plan.addAggDimAggInfo(d1.getColumnName, "sum", d1.getQueryOrder)
           }
         }
+        p.setPosition(queryOrder + aggCount)
         queryOrder + 1
 
-      case AggregateExpression(CarbonCount(attr: AttributeReference, None), _, false) =>
-        outputColumns += attr
+      case AggregateExpression(
+        CarbonCount(p@PositionLiteral(attr: AttributeReference, _), None), _, false) =>
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.nonEmpty) {
           val m1 = new QueryMeasure(attr.name)
@@ -115,20 +116,22 @@ case class CarbonTableScan(
             plan.addAggDimAggInfo(d1.getColumnName, "count", d1.getQueryOrder)
           }
         }
+        p.setPosition(queryOrder + aggCount)
         queryOrder + 1
 
-      case AggregateExpression(CarbonCount(lt: Literal, Some(attr: AttributeReference)), _, false)
+      case AggregateExpression(
+        CarbonCount(lt: Literal, Some(p@PositionLiteral(attr: AttributeReference, _))), _, false)
         if lt.value == "*" || lt.value == 1 =>
-        outputColumns += attr
         val m1 = new QueryMeasure("count(*)")
         m1.setAggregateFunction(CarbonCommonConstants.COUNT)
         m1.setQueryOrder(queryOrder)
         plan.addMeasure(m1)
         plan.setCountStartQuery(true)
+        p.setPosition(queryOrder + aggCount)
         queryOrder + 1
 
-      case AggregateExpression(CarbonAverage(attr: AttributeReference), _, false) =>
-        outputColumns += attr
+      case AggregateExpression(
+        CarbonAverage(p@PositionLiteral(attr: AttributeReference, _)), _, false) =>
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.nonEmpty) {
           val m1 = new QueryMeasure(attr.name)
@@ -143,10 +146,10 @@ case class CarbonTableScan(
             plan.addAggDimAggInfo(d1.getColumnName, "avg", d1.getQueryOrder)
           }
         }
+        p.setPosition(queryOrder + aggCount)
         queryOrder + 1
 
-      case AggregateExpression(Min(attr: AttributeReference), _, false) =>
-        outputColumns += attr
+      case AggregateExpression(Min(p@PositionLiteral(attr: AttributeReference, _)), _, false) =>
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.nonEmpty) {
           val m1 = new QueryMeasure(attr.name)
@@ -161,10 +164,10 @@ case class CarbonTableScan(
             plan.addAggDimAggInfo(d1.getColumnName, "min", d1.getQueryOrder)
           }
         }
+        p.setPosition(queryOrder + aggCount)
         queryOrder + 1
 
-      case AggregateExpression(Max(attr: AttributeReference), _, false) =>
-        outputColumns += attr
+      case AggregateExpression(Max(p@PositionLiteral(attr: AttributeReference, _)), _, false) =>
         val msrs = selectedMsrs.filter(m => m.getColumnName.equalsIgnoreCase(attr.name))
         if (msrs.nonEmpty) {
           val m1 = new QueryMeasure(attr.name)
@@ -179,7 +182,7 @@ case class CarbonTableScan(
             plan.addAggDimAggInfo(d1.getColumnName, "max", d1.getQueryOrder)
           }
         }
-//        posLiteral.setPosition(queryOrder)
+        p.setPosition(queryOrder + aggCount)
         queryOrder + 1
 
       case _ => throw new
@@ -216,6 +219,16 @@ case class CarbonTableScan(
         }
       })
     queryOrder = 0
+
+    // It is required to calculate as spark aggregators uses joined row with the current aggregates.
+    val aggCount = aggExprs match {
+      case Some(a: Seq[Expression]) =>
+        a.map {
+          case Alias(agg: AggregateExpression, name) => 1
+          case _ => 0
+        }.reduceLeftOption((left, right) => left + right).getOrElse(0)
+      case _ => 0
+    }
     // Separately handle group by columns, known or unknown partial aggregations and other
     // expressions. All single column & known aggregate expressions will use native aggregates for
     // measure and dimensions
@@ -227,8 +240,9 @@ case class CarbonTableScan(
           case attr@AttributeReference(_, _, _, _) => // Add all the references to carbon query
             addCarbonColumn(attr)
             outputColumns += attr
-          case Alias(agg: AggregateExpression, name) =>
-            queryOrder = processAggregateExpr(plan, agg, queryOrder)
+          case al@ Alias(agg: AggregateExpression, name) =>
+            outputColumns += al.toAttribute
+            queryOrder = processAggregateExpr(plan, agg, queryOrder, aggCount)
           case _ => forceDetailedQuery = true
         }
       case _ => forceDetailedQuery = true
@@ -275,7 +289,7 @@ case class CarbonTableScan(
     }
     else {
       attributes.foreach { attr =>
-        if(!outputColumns.exists(_.name.equals(attr))) {
+        if (!outputColumns.exists(_.name.equals(attr.name))) {
           addCarbonColumn(attr)
           outputColumns += attr
         }

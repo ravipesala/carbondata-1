@@ -63,6 +63,11 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
               detailQuery = true,
               useBinaryAggregation = false)(sqlContext)._1 :: Nil
           }
+        case CarbonDictionaryCatalystDecoder(relations, profile, aliasMap, _, child) =>
+          CarbonDictionaryDecoder(relations,
+            profile,
+            aliasMap,
+            planLater(child))(sqlContext) :: Nil
         case _ =>
           Nil
       }
@@ -83,13 +88,6 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         relation.carbonRelation.metaData.carbonTable.getFactTableName.toLowerCase
       // Check out any expressions are there in project list. if they are present then we need to
       // decode them as well.
-      val projectExprsNeedToDecode = new java.util.HashSet[Attribute]()
-      projectList.map {
-        case attr: AttributeReference =>
-        case Alias(attr: AttributeReference, _) =>
-        case others =>
-          others.references.map(f => projectExprsNeedToDecode.add(f))
-      }
       val projectSet = AttributeSet(projectList.flatMap(_.references))
       val scan = CarbonRawTableScan(projectSet.toSeq,
         relation.carbonRelation,
@@ -97,13 +95,19 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
         groupExprs,
         useBinaryAggregation)(sqlContext)
       val dimAggrsPresence: Boolean = scan.buildCarbonPlan.getDimAggregatorInfos.size() > 0
-      projectExprsNeedToDecode.addAll(scan.attributesNeedToDecode)
+      projectList.map {
+        case attr: AttributeReference =>
+        case Alias(attr: AttributeReference, _) =>
+        case others =>
+          others.references
+            .map(f => scan.attributesNeedToDecode.add(f.asInstanceOf[AttributeReference]))
+      }
       if (!detailQuery) {
-        if (projectExprsNeedToDecode.size > 0) {
+        if (scan.attributesNeedToDecode.size > 0) {
           val decoder = getCarbonDecoder(logicalRelation,
             sc,
             tableName,
-            projectExprsNeedToDecode.asScala.toSeq,
+            scan.attributesNeedToDecode.asScala.toSeq,
             scan)
           if (scan.unprocessedExprs.nonEmpty) {
             val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
@@ -115,11 +119,11 @@ class CarbonRawStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan
           (scan, dimAggrsPresence)
         }
       } else {
-        if (projectExprsNeedToDecode.size() > 0) {
+        if (scan.attributesNeedToDecode.size() > 0) {
           val decoder = getCarbonDecoder(logicalRelation,
             sc,
             tableName,
-            projectExprsNeedToDecode.asScala.toSeq,
+            scan.attributesNeedToDecode.asScala.toSeq,
             scan)
           if (scan.unprocessedExprs.nonEmpty) {
             val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
