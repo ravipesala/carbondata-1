@@ -48,7 +48,6 @@ class AllDataTypesTestCaseAggregate extends QueryTest with BeforeAndAfterAll {
   }
 
   test("select empname,length(designation),max(empno),min(empno), avg(empno) from alldatatypescubeAGG where empname in ('arvind','ayushi') group by empname,length(designation) order by empname") {
-    sql("select empname,length(designation),max(empno),min(empno), avg(empno) from alldatatypescubeAGG where empname in ('arvind','ayushi') group by empname,length(designation) order by empname").show()
     checkAnswer(
       sql("select empname,length(designation),max(empno),min(empno), avg(empno) from alldatatypescubeAGG where empname in ('arvind','ayushi') group by empname,length(designation) order by empname"),
       Seq(Row("arvind", 2, 11, 11, 11.0), Row("ayushi", 3, 15, 15, 15.0)))
