@@ -373,14 +373,18 @@ object PartialAggregation {
 
   private def convertAggregatesForPushdown(convertUnknown: Boolean,
       rewrittenAggregateExpressions: Seq[Expression]) = {
-    var counter: Int = 0
-    var updatedExpressions = MutableList[Expression]()
-    rewrittenAggregateExpressions.foreach(v => {
-      val updated = convertAggregate(v, counter, convertUnknown)
-      updatedExpressions += updated
-      counter = counter + 1
-    })
-    updatedExpressions
+    if (canBeConvertedToCarbonAggregate(rewrittenAggregateExpressions)) {
+      var counter: Int = 0
+      var updatedExpressions = MutableList[Expression]()
+      rewrittenAggregateExpressions.foreach(v => {
+        val updated = convertAggregate(v, counter, convertUnknown)
+        updatedExpressions += updated
+        counter = counter + 1
+      })
+      updatedExpressions
+    } else {
+      rewrittenAggregateExpressions
+    }
   }
 
   def makePositionLiteral(expr: Expression, index: Int): PositionLiteral = {
@@ -436,6 +440,19 @@ object PartialAggregation {
           }
       }
     }
+  }
+
+  /**
+   * There should be sync between carbonOperators validation and here. we should not convert to
+   * carbon aggregates if the validation does not satisfy.
+   */
+  def canBeConvertedToCarbonAggregate(expressions: Seq[Expression]): Boolean = {
+    val detailQuery = expressions.map {
+      case attr@AttributeReference(_, _, _, _) => true
+      case par: Alias if par.children.head.isInstanceOf[AggregateExpression1] => true
+      case _ => false
+    }.exists(!_)
+    !detailQuery
   }
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = unapply((plan, false))
