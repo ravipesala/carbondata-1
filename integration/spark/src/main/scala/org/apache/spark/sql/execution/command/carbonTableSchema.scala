@@ -1159,7 +1159,7 @@ private[sql] case class AlterTableCompaction(alterTableModel: AlterTableModel) e
 
     val relation =
       CarbonEnv.getInstance(sqlContext).carbonCatalog
-        .lookupRelation1(Option(schemaName), tableName, None)(sqlContext)
+        .lookupRelation1(Option(schemaName), tableName)(sqlContext)
         .asInstanceOf[CarbonRelation]
     if (relation == null) {
       sys.error(s"Table $schemaName.$tableName does not exist")
