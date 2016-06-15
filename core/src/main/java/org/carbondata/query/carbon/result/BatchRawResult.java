@@ -41,11 +41,7 @@ public class BatchRawResult extends BatchResult {
    * @return
    */
   public Object[] getRawRow(int counter) {
-    Object[] outputRow = new Object[rows.length];
-    for(int col = 0 ; col < rows.length ; col++) {
-      outputRow[col] = rows[col][counter];
-    }
-    return outputRow;
+    return rows[counter];
   }
   /**
    * Returns the next element in the iteration.
@@ -139,6 +135,6 @@ public class BatchRawResult extends BatchResult {
    * @return
    */
   public int getSize() {
-    return size;
+    return rows.length;
   }
 }

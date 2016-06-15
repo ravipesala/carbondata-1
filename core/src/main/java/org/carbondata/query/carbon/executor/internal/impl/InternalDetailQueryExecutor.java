@@ -70,7 +70,7 @@ public class InternalDetailQueryExecutor implements InternalQueryExecutor {
         recordSize = CarbonCommonConstants.INMEMORY_REOCRD_SIZE_DEFAULT;
       }
     }
-    int numberOfCores = recordSize / Integer.parseInt(CarbonProperties.getInstance()
+    numberOfCores = recordSize / Integer.parseInt(CarbonProperties.getInstance()
         .getProperty(CarbonCommonConstants.BLOCKLET_SIZE,
             CarbonCommonConstants.BLOCKLET_SIZE_DEFAULT_VAL));
     if (numberOfCores == 0) {
