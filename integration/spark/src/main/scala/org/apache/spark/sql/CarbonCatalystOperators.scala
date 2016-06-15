@@ -426,13 +426,25 @@ object CarbonAggregation {
         case Average(attr: AttributeReference) =>
           val convertedDataType = transformArrayType(attr)
           CarbonAverage(makePositionLiteral(convertedDataType, index, convertedDataType.dataType))
+        case Average(Cast(attr: AttributeReference, dataType)) =>
+          val convertedDataType = transformArrayType(attr)
+          CarbonAverage(
+              makePositionLiteral(convertedDataType, index, convertedDataType.dataType))
         case Count(Seq(s: Literal)) =>
           CarbonCount(s, Some(makePositionLiteral(transformLongType(oneAttr), index, LongType)))
         case Count(Seq(attr: AttributeReference)) =>
           CarbonCount(makePositionLiteral(transformLongType(attr), index, LongType))
-        case Sum(attr: AttributeReference) => Sum(makePositionLiteral(attr, index, attr.dataType))
+        case Sum(attr: AttributeReference) =>
+          Sum(makePositionLiteral(attr, index, attr.dataType))
+        case Sum(Cast(attr: AttributeReference, dataType)) =>
+          Sum(Cast(makePositionLiteral(attr, index, attr.dataType), dataType))
         case Min(attr: AttributeReference) => Min(makePositionLiteral(attr, index, attr.dataType))
-        case Max(attr: AttributeReference) => Max(makePositionLiteral(attr, index, attr.dataType))
+        case Min(Cast(attr: AttributeReference, dataType)) =>
+          Min(Cast(makePositionLiteral(attr, index, attr.dataType), dataType))
+        case Max(attr: AttributeReference) =>
+          Max(makePositionLiteral(attr, index, attr.dataType))
+        case Max(Cast(attr: AttributeReference, dataType)) =>
+          Max(Cast(makePositionLiteral(attr, index, attr.dataType), dataType))
       }
     } else {
       current
@@ -441,11 +453,15 @@ object CarbonAggregation {
 
   def canBeConverted(current: Expression): Boolean = current match {
     case Alias(AggregateExpression(Average(attr: AttributeReference), _, false), _) => true
+    case Alias(AggregateExpression(Average(Cast(attr: AttributeReference, _)), _, false), _) => true
     case Alias(AggregateExpression(Count(Seq(s: Literal)), _, false), _) => true
     case Alias(AggregateExpression(Count(Seq(attr: AttributeReference)), _, false), _) => true
     case Alias(AggregateExpression(Sum(attr: AttributeReference), _, false), _) => true
+    case Alias(AggregateExpression(Sum(Cast(attr: AttributeReference, _)), _, false), _) => true
     case Alias(AggregateExpression(Min(attr: AttributeReference), _, false), _) => true
+    case Alias(AggregateExpression(Min(Cast(attr: AttributeReference, _)), _, false), _) => true
     case Alias(AggregateExpression(Max(attr: AttributeReference), _, false), _) => true
+    case Alias(AggregateExpression(Max(Cast(attr: AttributeReference, _)), _, false), _) => true
     case _ => false
   }
 
