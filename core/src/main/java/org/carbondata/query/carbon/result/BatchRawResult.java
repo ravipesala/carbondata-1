@@ -22,7 +22,6 @@ package org.carbondata.query.carbon.result;
 import org.carbondata.core.carbon.metadata.encoder.Encoding;
 import org.carbondata.core.keygenerator.directdictionary.DirectDictionaryGenerator;
 import org.carbondata.core.keygenerator.directdictionary.DirectDictionaryKeyGeneratorFactory;
-import org.carbondata.core.util.CarbonUtil;
 import org.carbondata.query.carbon.model.QueryDimension;
 import org.carbondata.query.carbon.model.QuerySchemaInfo;
 import org.carbondata.query.carbon.util.DataTypeUtil;
@@ -83,47 +82,6 @@ public class BatchRawResult extends BatchResult {
     }
     counter++;
     return parsedData;
-  }
-
-  public static Object[] parseData(ByteArrayWrapper key, Object[] aggData,
-      QuerySchemaInfo querySchemaInfo, int[] aggOrder) {
-    long[] surrogateResult = querySchemaInfo.getKeyGenerator()
-        .getKeyArray(key.getDictionaryKey(), querySchemaInfo.getMaskedByteIndexes());
-    QueryDimension[] queryDimensions = querySchemaInfo.getQueryDimensions();
-    Object[] parsedData = new Object[queryDimensions.length + aggData.length];
-    int noDictionaryColumnIndex = 0;
-    for (int i = 0; i < queryDimensions.length; i++) {
-      if (!CarbonUtil
-          .hasEncoding(queryDimensions[i].getDimension().getEncoder(), Encoding.DICTIONARY)) {
-        parsedData[i] = DataTypeUtil.getDataBasedOnDataType(
-            new String(key.getNoDictionaryKeyByIndex(noDictionaryColumnIndex++)),
-            queryDimensions[i].getDimension().getDataType());
-      } else if (queryDimensions[i].getDimension().hasEncoding(Encoding.DIRECT_DICTIONARY)) {
-        DirectDictionaryGenerator directDictionaryGenerator = DirectDictionaryKeyGeneratorFactory
-            .getDirectDictionaryGenerator(queryDimensions[i].getDimension().getDataType());
-        parsedData[i] = directDictionaryGenerator.getValueFromSurrogate(
-            (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()]);
-      } else {
-        parsedData[i] = (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()];
-      }
-    }
-    for (int i = 0; i < aggData.length; i++) {
-      parsedData[i + queryDimensions.length] = aggData[i];
-    }
-    Object[] orderData = new Object[parsedData.length];
-    for (int i = 0; i < parsedData.length; i++) {
-      // this case can come with expressions with out column like count(*)
-      if(i < aggOrder.length) {
-        orderData[i] = parsedData[aggOrder[i]];
-      } else {
-        orderData[i] = parsedData[i];
-      }
-    }
-    return orderData;
-  }
-
-  public QuerySchemaInfo getQuerySchemaInfo() {
-    return querySchemaInfo;
   }
 
   public void setQuerySchemaInfo(QuerySchemaInfo querySchemaInfo) {

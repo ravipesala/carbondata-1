@@ -18,7 +18,6 @@
  */
 package org.carbondata.query.carbon.executor.infos;
 
-import java.util.List;
 import java.util.Map;
 
 import org.carbondata.core.cache.dictionary.Dictionary;
