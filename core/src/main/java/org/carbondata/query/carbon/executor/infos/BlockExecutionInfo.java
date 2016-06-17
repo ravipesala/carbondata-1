@@ -27,9 +27,7 @@ import org.carbondata.core.carbon.datastore.IndexKey;
 import org.carbondata.core.carbon.datastore.block.AbstractIndex;
 import org.carbondata.core.datastorage.store.impl.FileFactory.FileType;
 import org.carbondata.core.keygenerator.KeyGenerator;
-import org.carbondata.query.carbon.aggregator.dimension.DimensionDataAggregator;
 import org.carbondata.query.carbon.merger.ScannedResultMerger;
-import org.carbondata.query.carbon.model.CustomAggregateExpression;
 import org.carbondata.query.filter.executer.FilterExecuter;
 
 /**
@@ -90,12 +88,6 @@ public class BlockExecutionInfo {
    * block based on filter values
    */
   private IndexKey endKey;
-
-  /**
-   * holder of custom aggregation details which will be used to aggregate the
-   * custome function UDAF
-   */
-  private List<CustomAggregateExpression> customAggregateExpressions;
 
   /**
    * masked byte for block which will be used to unpack the fixed length key,
@@ -173,11 +165,6 @@ public class BlockExecutionInfo {
    * key generator used for generating the table block fixed length key
    */
   private KeyGenerator blockKeyGenerator;
-  /**
-   * dimension aggregator list which will be used to aggregate the dimension
-   * data
-   */
-  private List<DimensionDataAggregator> dimensionAggregator;
 
   /**
    * each column value size
@@ -330,21 +317,6 @@ public class BlockExecutionInfo {
    */
   public void setEndKey(IndexKey endKey) {
     this.endKey = endKey;
-  }
-
-  /**
-   * @return the customAggregateExpression
-   */
-  public List<CustomAggregateExpression> getCustomAggregateExpressions() {
-    return customAggregateExpressions;
-  }
-
-  /**
-   * @param customAggregateExpression the customAggregateExpression to set
-   */
-  public void setCustomAggregateExpressions(
-      List<CustomAggregateExpression> customAggregateExpressions) {
-    this.customAggregateExpressions = customAggregateExpressions;
   }
 
   /**
@@ -541,20 +513,6 @@ public class BlockExecutionInfo {
    */
   public void setBlockKeyGenerator(KeyGenerator tableBlockKeyGenerator) {
     this.blockKeyGenerator = tableBlockKeyGenerator;
-  }
-
-  /**
-   * @return the dimensionAggregator
-   */
-  public List<DimensionDataAggregator> getDimensionAggregator() {
-    return dimensionAggregator;
-  }
-
-  /**
-   * @param dimensionAggregator the dimensionAggregator to set
-   */
-  public void setDimensionAggregator(List<DimensionDataAggregator> dimensionAggregator) {
-    this.dimensionAggregator = dimensionAggregator;
   }
 
   /**

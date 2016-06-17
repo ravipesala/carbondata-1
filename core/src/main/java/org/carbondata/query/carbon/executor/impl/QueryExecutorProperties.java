@@ -24,7 +24,6 @@ import java.util.Map;
 import org.carbondata.core.cache.dictionary.Dictionary;
 import org.carbondata.core.carbon.datastore.block.AbstractIndex;
 import org.carbondata.core.carbon.metadata.datatype.DataType;
-import org.carbondata.query.aggregator.MeasureAggregator;
 import org.carbondata.query.carbon.executor.infos.KeyStructureInfo;
 
 /**
@@ -65,11 +64,6 @@ public class QueryExecutorProperties {
    * in a query
    */
   public byte[] sortDimIndexes;
-
-  /**
-   * aggregator class selected for all aggregation function selected in query
-   */
-  public MeasureAggregator[] measureAggregators;
 
   /**
    * this will hold the information about the dictionary dimension

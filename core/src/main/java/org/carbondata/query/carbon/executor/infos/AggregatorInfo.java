@@ -19,20 +19,12 @@
 package org.carbondata.query.carbon.executor.infos;
 
 import org.carbondata.core.carbon.metadata.datatype.DataType;
-import org.carbondata.query.aggregator.MeasureAggregator;
 
 /**
  * Info class which store all the details
  * which is required during aggregation
  */
 public class AggregatorInfo {
-
-  /**
-   * measure aggregator array instance which will be used to
-   * aggregate the aggregate function columns
-   * it can be any dimension or measure column
-   */
-  private MeasureAggregator[] measuresAggreagators;
 
   /**
    * selected query measure ordinal
@@ -76,20 +68,6 @@ public class AggregatorInfo {
    * Datatype of each measure;
    */
   private DataType[] measureDataTypes;
-
-  /**
-   * @return the measuresAggreagators
-   */
-  public MeasureAggregator[] getMeasuresAggreagators() {
-    return measuresAggreagators;
-  }
-
-  /**
-   * @param measuresAggreagators the measuresAggreagators to set
-   */
-  public void setMeasuresAggreagators(MeasureAggregator[] measuresAggreagators) {
-    this.measuresAggreagators = measuresAggreagators;
-  }
 
   /**
    * @return the measureOrdinal

@@ -38,11 +38,11 @@ class ValueImpl extends Value[Array[Object]] {
 }
 
 trait RawValue[V] extends Serializable {
-  def getValue(value: BatchRawResult): V
+  def getValue(value: Array[Any]): V
 }
 
-class RawValueImpl extends RawValue[BatchRawResult] {
-  override def getValue(value: BatchRawResult): BatchRawResult = value
+class RawValueImpl extends RawValue[Array[Any]] {
+  override def getValue(value: Array[Any]): Array[Any] = value
 }
 
 trait RawKey[K, V] extends Serializable {

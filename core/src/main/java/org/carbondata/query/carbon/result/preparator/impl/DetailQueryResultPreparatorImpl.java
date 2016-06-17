@@ -67,7 +67,7 @@ public class DetailQueryResultPreparatorImpl
     }
     List<QueryDimension> queryDimension = queryModel.getQueryDimension();
     int dimensionCount = queryDimension.size();
-    int totalNumberOfColumn = dimensionCount + queryExecuterProperties.measureAggregators.length;
+    int totalNumberOfColumn = dimensionCount + queryExecuterProperties.measureDataTypes.length;
     Object[][] resultData = new Object[scannedResult.size()][totalNumberOfColumn];
     if (!queryExecuterProperties.isFunctionQuery && totalNumberOfColumn == 0
         && scannedResult.size() > 0) {
@@ -100,7 +100,7 @@ public class DetailQueryResultPreparatorImpl
       }
       if (value != null) {
         System.arraycopy(value, 0, resultData[currentRow], dimensionCount,
-            queryExecuterProperties.measureAggregators.length);
+            queryExecuterProperties.measureDataTypes.length);
       }
       currentRow++;
       noDictionaryColumnIndex = 0;
@@ -117,7 +117,7 @@ public class DetailQueryResultPreparatorImpl
     Object[][] rows = new Object[rowSize][];
     List<QueryDimension> queryDimensions = queryModel.getQueryDimension();
     int dimensionCount = queryDimensions.size();
-    int msrCount = queryExecuterProperties.measureAggregators.length;
+    int msrCount = queryExecuterProperties.measureDataTypes.length;
     Object[] row;
     for (int rowIndex = 0; rowIndex < rowSize; rowIndex++) {
       row = new Object[dimensionCount + msrCount];

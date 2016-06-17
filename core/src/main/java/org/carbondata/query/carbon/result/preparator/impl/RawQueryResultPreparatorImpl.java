@@ -35,7 +35,7 @@ public class RawQueryResultPreparatorImpl
         .toArray(new QueryDimension[queryModel.getQueryDimension().size()]));
     querySchemaInfo.setQueryMeasures(queryModel.getQueryMeasures()
         .toArray(new QueryMeasure[queryModel.getQueryMeasures().size()]));
-    int msrSize = queryExecuterProperties.measureAggregators.length;
+    int msrSize = queryExecuterProperties.measureDataTypes.length;
     int dimensionCount = queryModel.getQueryDimension().size();
     int[] queryOrder = new int[dimensionCount + msrSize];
     int[] queryReverseOrder = new int[dimensionCount + msrSize];
@@ -58,7 +58,7 @@ public class RawQueryResultPreparatorImpl
       batchRawResult.setQuerySchemaInfo(querySchemaInfo);
       return batchRawResult;
     }
-    int msrSize = queryExecuterProperties.measureAggregators.length;
+    int msrSize = queryExecuterProperties.measureDataTypes.length;
     Object[][] resultData = new Object[scannedResult.size()][];
     Object[] value;
     Object[] row;

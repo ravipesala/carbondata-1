@@ -26,7 +26,6 @@ import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.carbon.datastore.chunk.MeasureColumnDataChunk;
 import org.carbondata.core.carbon.metadata.datatype.DataType;
 import org.carbondata.core.keygenerator.KeyGenException;
-import org.carbondata.query.carbon.aggregator.DataAggregator;
 import org.carbondata.query.carbon.aggregator.ScannedResultAggregator;
 import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
 import org.carbondata.query.carbon.executor.infos.KeyStructureInfo;
@@ -95,8 +94,7 @@ public class ListBasedResultAggregator implements ScannedResultAggregator {
    */
   private DataType[] measureDatatypes;
 
-  public ListBasedResultAggregator(BlockExecutionInfo blockExecutionInfos,
-      DataAggregator aggregator) {
+  public ListBasedResultAggregator(BlockExecutionInfo blockExecutionInfos) {
     limit = blockExecutionInfos.getLimit();
     this.tableBlockExecutionInfos = blockExecutionInfos;
     restructureInfos = blockExecutionInfos.getKeyStructureInfo();

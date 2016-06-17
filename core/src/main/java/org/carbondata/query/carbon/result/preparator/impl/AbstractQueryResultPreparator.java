@@ -6,7 +6,6 @@ import org.carbondata.core.carbon.metadata.encoder.Encoding;
 import org.carbondata.core.keygenerator.directdictionary.DirectDictionaryGenerator;
 import org.carbondata.core.keygenerator.directdictionary.DirectDictionaryKeyGeneratorFactory;
 import org.carbondata.core.util.CarbonUtil;
-import org.carbondata.query.aggregator.MeasureAggregator;
 import org.carbondata.query.carbon.executor.impl.QueryExecutorProperties;
 import org.carbondata.query.carbon.model.QueryDimension;
 import org.carbondata.query.carbon.model.QueryModel;
@@ -31,17 +30,6 @@ public abstract class AbstractQueryResultPreparator<K, V> implements QueryResult
     this.queryExecuterProperties = executerProperties;
     this.queryModel = queryModel;
   }
-
-  protected void fillMeasureValueForAggGroupByQuery(QueryModel queryModel,
-      Object[][] surrogateResult, int dimensionCount, int columnIndex, MeasureAggregator[] v) {
-    int msrCount = queryModel.getQueryMeasures().size();
-    for (int i = 0; i < msrCount; i++) {
-      v[queryExecuterProperties.measureStartIndex + i] =
-          ((MeasureAggregator) surrogateResult[dimensionCount
-              + queryExecuterProperties.measureStartIndex + i][columnIndex]);
-    }
-  }
-
 
   protected void fillDimensionData(Object[][] convertedResult, List<QueryDimension> queryDimensions,
       int dimensionCount, Object[] row, int rowIndex) {
