@@ -63,8 +63,7 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
             carbonRawScan(projectList,
               predicates,
               carbonRelation,
-              l,
-              detailQuery = true)(sqlContext) :: Nil
+              l)(sqlContext) :: Nil
           }
         case CarbonDictionaryCatalystDecoder(relations, profile, aliasMap, _, child) =>
           CarbonDictionaryDecoder(relations,
@@ -82,8 +81,7 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
     private def carbonRawScan(projectList: Seq[NamedExpression],
       predicates: Seq[Expression],
       relation: CarbonDatasourceRelation,
-      logicalRelation: LogicalRelation,
-      detailQuery: Boolean)(sc: SQLContext): SparkPlan = {
+      logicalRelation: LogicalRelation)(sc: SQLContext): SparkPlan = {
 
       val tableName: String =
         relation.carbonRelation.metaData.carbonTable.getFactTableName.toLowerCase
@@ -97,41 +95,27 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
         case attr: AttributeReference =>
         case Alias(attr: AttributeReference, _) =>
         case others =>
-          others.references
-              .map(f => scan.attributesNeedToDecode.add(f.asInstanceOf[AttributeReference]))
-      }
-      if (!detailQuery) {
-        if (scan.attributesNeedToDecode.size > 0) {
-          val decoder = getCarbonDecoder(logicalRelation,
-            sc,
-            tableName,
-            scan.attributesNeedToDecode.asScala.toSeq,
-            scan)
-          if (scan.unprocessedExprs.nonEmpty) {
-            val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
-            Project(projectList, filterCondToAdd.map(Filter(_, decoder)).getOrElse(decoder))
-          } else {
-            Project(projectList, decoder)
+          others.references.map{f =>
+            val dictionary = relation.carbonRelation.metaData.dictionaryMap.get(f.name)
+            if (dictionary.isDefined && dictionary.get) {
+              scan.attributesNeedToDecode.add(f.asInstanceOf[AttributeReference])
+            }
           }
+      }
+      if (scan.attributesNeedToDecode.size() > 0) {
+        val decoder = getCarbonDecoder(logicalRelation,
+          sc,
+          tableName,
+          scan.attributesNeedToDecode.asScala.toSeq,
+          scan)
+        if (scan.unprocessedExprs.nonEmpty) {
+          val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
+          Project(projectList, filterCondToAdd.map(Filter(_, decoder)).getOrElse(decoder))
         } else {
-          scan
+          Project(projectList, decoder)
         }
       } else {
-        if (scan.attributesNeedToDecode.size() > 0) {
-          val decoder = getCarbonDecoder(logicalRelation,
-            sc,
-            tableName,
-            scan.attributesNeedToDecode.asScala.toSeq,
-            scan)
-          if (scan.unprocessedExprs.nonEmpty) {
-            val filterCondToAdd = scan.unprocessedExprs.reduceLeftOption(expressions.And)
-            Project(projectList, filterCondToAdd.map(Filter(_, decoder)).getOrElse(decoder))
-          } else {
-            Project(projectList, decoder)
-          }
-        } else {
-          Project(projectList, scan)
-        }
+        Project(projectList, scan)
       }
     }
 
