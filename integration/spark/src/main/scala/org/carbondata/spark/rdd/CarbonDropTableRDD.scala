@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.command.Partitioner
 import org.carbondata.spark.Value
 import org.carbondata.spark.util.CarbonQueryUtil
 
-class CarbonDropCubeRDD[V: ClassTag](
+class CarbonDropTableRDD[V: ClassTag](
     sc: SparkContext,
     valueClass: Value[V],
     schemaName: String,

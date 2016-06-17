@@ -34,7 +34,7 @@ import org.carbondata.core.iterator.CarbonIterator
 import org.carbondata.hadoop.{CarbonInputFormat, CarbonInputSplit}
 import org.carbondata.query.carbon.executor.QueryExecutorFactory
 import org.carbondata.query.carbon.model.QueryModel
-import org.carbondata.query.carbon.result.{BatchResult, RowResult}
+import org.carbondata.query.carbon.result.BatchResult
 import org.carbondata.query.carbon.result.iterator.ChunkRowIterator
 import org.carbondata.query.expression.Expression
 import org.carbondata.spark.RawValue
@@ -74,7 +74,7 @@ class CarbonScanRDD[V: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     val startTime = System.currentTimeMillis()
-    val (carbonInputFormat: CarbonInputFormat[RowResult], job: Job) =
+    val (carbonInputFormat: CarbonInputFormat[Array[Object]], job: Job) =
       QueryPlanUtil.createCarbonInputFormat(queryModel.getAbsoluteTableIdentifier)
 
     val result = new util.ArrayList[Partition](defaultParallelism)

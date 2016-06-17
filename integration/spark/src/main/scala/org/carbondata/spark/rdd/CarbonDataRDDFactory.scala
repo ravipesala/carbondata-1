@@ -29,19 +29,19 @@ import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.spark.{Logging, Partition, SparkContext}
-import org.apache.spark.sql.{CarbonEnv, CarbonRelation, SQLContext}
+import org.apache.spark.sql.{CarbonEnv, SQLContext}
 import org.apache.spark.sql.execution.command.{AlterTableModel, CompactionModel, Partitioner}
 import org.apache.spark.util.{FileUtils, SplitUtils}
 
 import org.carbondata.common.logging.LogServiceFactory
-import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonDataLoadSchema, CarbonTableIdentifier}
+import org.carbondata.core.carbon.CarbonDataLoadSchema
 import org.carbondata.core.carbon.datastore.block.TableBlockInfo
 import org.carbondata.core.carbon.metadata.CarbonMetadata
 import org.carbondata.core.carbon.metadata.schema.table.CarbonTable
 import org.carbondata.core.constants.CarbonCommonConstants
 import org.carbondata.core.load.{BlockDetails, LoadMetadataDetails}
 import org.carbondata.core.locks.{CarbonLockFactory, LockUsage}
-import org.carbondata.core.util.{CarbonProperties, CarbonUtil}
+import org.carbondata.core.util.CarbonUtil
 import org.carbondata.integration.spark.merger.CompactionType
 import org.carbondata.lcm.status.SegmentStatusManager
 import org.carbondata.processing.util.CarbonDataProcessorUtil
@@ -702,22 +702,13 @@ object CarbonDataRDDFactory extends Logging {
     }
   }
 
-  def dropAggregateTable(
+  def dropTable(
       sc: SparkContext,
       schema: String,
       cube: String,
       partitioner: Partitioner) {
     val v: Value[Array[Object]] = new ValueImpl()
-    new CarbonDropAggregateTableRDD(sc, v, schema, cube, partitioner).collect
-  }
-
-  def dropCube(
-      sc: SparkContext,
-      schema: String,
-      cube: String,
-      partitioner: Partitioner) {
-    val v: Value[Array[Object]] = new ValueImpl()
-    new CarbonDropCubeRDD(sc, v, schema, cube, partitioner).collect
+    new CarbonDropTableRDD(sc, v, schema, cube, partitioner).collect
   }
 
   def cleanFiles(

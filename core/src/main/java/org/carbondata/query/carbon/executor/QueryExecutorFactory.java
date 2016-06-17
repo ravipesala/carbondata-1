@@ -18,8 +18,6 @@
  */
 package org.carbondata.query.carbon.executor;
 
-import org.carbondata.common.logging.LogService;
-import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.query.carbon.executor.impl.DetailQueryExecutor;
 import org.carbondata.query.carbon.executor.impl.DetailRawRecordQueryExecutor;
 import org.carbondata.query.carbon.model.QueryModel;
@@ -30,15 +28,10 @@ import org.carbondata.query.carbon.model.QueryModel;
  */
 public class QueryExecutorFactory {
 
-  private static final LogService LOGGER =
-      LogServiceFactory.getLogService(QueryExecutorFactory.class.getName());
-
   public static QueryExecutor getQueryExecutor(QueryModel queryModel) {
     if (queryModel.isForcedDetailRawQuery()) {
       return new DetailRawRecordQueryExecutor();
     } else {
-      // detail query
-      LOGGER.info("Detail query: ");
       return new DetailQueryExecutor();
     }
   }

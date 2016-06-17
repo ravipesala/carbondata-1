@@ -176,8 +176,8 @@ public class ListBasedResultAggregator implements ScannedResultAggregator {
   /**
    * Below method will used to get the result
    */
-  @Override public Result<List<ListBasedResultWrapper>, Object> getAggregatedResult() {
-    Result<List<ListBasedResultWrapper>, Object> result = new ListBasedResult();
+  @Override public Result getAggregatedResult() {
+    Result result = new ListBasedResult();
     if (!tableBlockExecutionInfos.isFixedKeyUpdateRequired()) {
       updateKeyWithLatestBlockKeygenerator();
       result.addScannedResult(listBasedResult);
