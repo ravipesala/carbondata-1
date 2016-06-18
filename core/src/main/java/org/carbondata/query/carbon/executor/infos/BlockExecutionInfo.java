@@ -28,7 +28,7 @@ import org.carbondata.core.datastorage.store.impl.FileFactory.FileType;
 import org.carbondata.core.keygenerator.KeyGenerator;
 import org.carbondata.query.filter.executer.FilterExecuter;
 
-/**AbstractScannedResultMerger
+/**
  * Below class will have all the properties which needed during query execution
  * for one block
  */
