@@ -24,17 +24,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import org.carbondata.core.iterator.CarbonIterator;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
 import org.carbondata.query.carbon.executor.impl.QueryExecutorProperties;
 import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
-import org.carbondata.query.carbon.executor.internal.InternalQueryExecutor;
 import org.carbondata.query.carbon.model.QueryModel;
 import org.carbondata.query.carbon.result.BatchResult;
 import org.carbondata.query.carbon.result.ListBasedResultWrapper;
 import org.carbondata.query.carbon.result.Result;
 import org.carbondata.query.carbon.result.preparator.QueryResultPreparator;
-import org.carbondata.query.carbon.result.preparator.impl.DetailQueryResultPreparatorImpl;
 
 /**
  * In case of detail query we cannot keep all the records in memory so for
@@ -56,8 +53,7 @@ public class DetailQueryResultIterator extends AbstractDetailQueryResultIterator
       QueryExecutorProperties executerProperties, QueryModel queryModel,
       QueryResultPreparator queryResultPreparator) {
     super(infos, executerProperties, queryModel);
-    this.queryResultPreparator =
-        new DetailQueryResultPreparatorImpl(executerProperties, queryModel);
+    this.queryResultPreparator = queryResultPreparator;
   }
 
   @Override public BatchResult next() {
