@@ -24,17 +24,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import org.carbondata.core.iterator.CarbonIterator;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
 import org.carbondata.query.carbon.executor.impl.QueryExecutorProperties;
 import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
-import org.carbondata.query.carbon.executor.internal.InternalQueryExecutor;
 import org.carbondata.query.carbon.model.QueryModel;
 import org.carbondata.query.carbon.result.BatchResult;
 import org.carbondata.query.carbon.result.ListBasedResultWrapper;
 import org.carbondata.query.carbon.result.Result;
 import org.carbondata.query.carbon.result.preparator.QueryResultPreparator;
-import org.carbondata.query.carbon.result.preparator.impl.RawQueryResultPreparatorImpl;
 
 /**
  * In case of detail query we cannot keep all the records in memory so for
@@ -45,15 +42,15 @@ public class DetailRawQueryResultIterator extends AbstractDetailQueryResultItera
 
   private ExecutorService execService = Executors.newFixedThreadPool(1);
 
-  private Future<ResultInfo> future;
+  private Future<BatchResult> future;
 
   private QueryResultPreparator<List<ListBasedResultWrapper>, Object> queryResultPreparator;
 
   public DetailRawQueryResultIterator(List<BlockExecutionInfo> infos,
       QueryExecutorProperties executerProperties, QueryModel queryModel,
-      InternalQueryExecutor queryExecutor) {
-    super(infos, executerProperties, queryModel, queryExecutor);
-    this.queryResultPreparator = new RawQueryResultPreparatorImpl(executerProperties, queryModel);
+      QueryResultPreparator queryResultPreparator) {
+    super(infos, executerProperties, queryModel);
+    this.queryResultPreparator = queryResultPreparator;
   }
 
   @Override public BatchResult next() {
@@ -62,59 +59,33 @@ public class DetailRawQueryResultIterator extends AbstractDetailQueryResultItera
       if (future == null) {
         future = execute();
       }
-      ResultInfo resultFromFuture = getResultFromFuture(future);
-      result = resultFromFuture.result;
-      currentCounter += resultFromFuture.counter;
+      result = future.get();
+      nextBatch = false;
       if (hasNext()) {
+        nextBatch = true;
         future = execute();
       } else {
         fileReader.finish();
       }
-    } catch (QueryExecutionException e) {
+    } catch (Exception ex) {
       fileReader.finish();
-      throw new RuntimeException(e.getCause().getMessage());
+      throw new RuntimeException(ex.getCause().getMessage());
     }
     return result;
   }
 
-  private ResultInfo getResultFromFuture(Future<ResultInfo> future) throws QueryExecutionException {
-    try {
-      return future.get();
-    } catch (Exception e) {
-      throw new QueryExecutionException(e.getMessage());
-    }
-  }
-
-  private Future<ResultInfo> execute() {
-    return execService.submit(new Callable<ResultInfo>() {
-      @Override public ResultInfo call() throws QueryExecutionException {
-        int counter = updateSliceIndexToBeExecuted();
-        CarbonIterator<Result> result =
-            executor.executeQuery(blockExecutionInfos, blockIndexToBeExecuted, fileReader);
-        for (int i = 0; i < blockIndexToBeExecuted.length; i++) {
-          if (blockIndexToBeExecuted[i] != -1) {
-            blockExecutionInfos.get(blockIndexToBeExecuted[i]).setFirstDataBlock(
-                blockExecutionInfos.get(blockIndexToBeExecuted[i]).getFirstDataBlock()
-                    .getNextDataRefNode());
-          }
-        }
+  private Future<BatchResult> execute() {
+    return execService.submit(new Callable<BatchResult>() {
+      @Override public BatchResult call() throws QueryExecutionException {
         BatchResult batchResult;
-        if (null != result) {
-          Result next = result.next();
+        Result next = dataBlockProcessor.next();
+        if (null != next) {
           batchResult = queryResultPreparator.prepareQueryResult(next);
         } else {
           batchResult = queryResultPreparator.prepareQueryResult(null);
         }
-        ResultInfo resultInfo = new ResultInfo();
-        resultInfo.counter = counter;
-        resultInfo.result = batchResult;
-        return resultInfo;
+        return batchResult;
       }
     });
-  }
-
-  private static class ResultInfo {
-    private int counter;
-    private BatchResult result;
   }
 }

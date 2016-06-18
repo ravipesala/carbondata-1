@@ -27,19 +27,20 @@ import org.carbondata.query.carbon.aggregator.ScannedResultAggregator;
 import org.carbondata.query.carbon.aggregator.impl.ListBasedResultAggregator;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
 import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
+import org.carbondata.query.carbon.result.AbstractScannedResult;
+import org.carbondata.query.carbon.result.Result;
 import org.carbondata.query.carbon.scanner.BlockletScanner;
 import org.carbondata.query.carbon.scanner.impl.FilterScanner;
 import org.carbondata.query.carbon.scanner.impl.NonFilterScanner;
 
 /**
- * This class provides a skeletal implementation of the
- * {@link BlockProcessor} interface to minimize the effort required to
- * implement this interface.
+ * This abstract class provides a skeletal implementation of the
+ * Block iterator.
  */
-public abstract class AbstractDataBlockProcessor implements BlockProcessor {
+public abstract class AbstractDataBlockIterator extends CarbonIterator<Result> {
 
   private static final LogService LOGGER =
-      LogServiceFactory.getLogService(AbstractDataBlockProcessor.class.getName());
+      LogServiceFactory.getLogService(AbstractDataBlockIterator.class.getName());
   /**
    * iterator which will be used to iterate over data blocks
    */
@@ -66,7 +67,15 @@ public abstract class AbstractDataBlockProcessor implements BlockProcessor {
    */
   protected BlocksChunkHolder blocksChunkHolder;
 
-  public AbstractDataBlockProcessor(BlockExecutionInfo blockExecutionInfo, FileHolder fileReader) {
+  /**
+   * batch size of result
+   */
+  protected int batchSize;
+
+  protected AbstractScannedResult scannedResult;
+
+  public AbstractDataBlockIterator(BlockExecutionInfo blockExecutionInfo,
+      FileHolder fileReader, int batchSize) {
     this.blockExecutionInfo = blockExecutionInfo;
     dataBlockIterator = new BlockletIterator(blockExecutionInfo.getFirstDataBlock(),
         blockExecutionInfo.getNumberOfBlockToScan());
@@ -82,19 +91,36 @@ public abstract class AbstractDataBlockProcessor implements BlockProcessor {
 
     this.scannerResultAggregator =
         new ListBasedResultAggregator(blockExecutionInfo);
+    this.batchSize = batchSize;
   }
 
-  /**
-   * Below method will be used to add the scanned result to scanned result
-   * processor
-   */
-  protected void finishScanning() {
+  public boolean hasNext() {
     try {
-      this.blockExecutionInfo.getScannedResultProcessor()
-          .addScannedResult(scannerResultAggregator.getAggregatedResult());
-    } catch (QueryExecutionException e) {
-      LOGGER.error(e,
-          "Problem while adding the result to Scanned Result Processor");
+      if (scannedResult != null && scannedResult.hasNext()) {
+        return true;
+      } else {
+        scannedResult = getNextScannedResult();
+        while (scannedResult != null) {
+          if (scannedResult.hasNext()) {
+            return true;
+          }
+          scannedResult = getNextScannedResult();
+        }
+        return false;
+      }
+    } catch (QueryExecutionException ex) {
+      throw new RuntimeException(ex);
     }
   }
+
+  private AbstractScannedResult getNextScannedResult() throws QueryExecutionException {
+    if (dataBlockIterator.hasNext()) {
+      blocksChunkHolder.setDataBlock(dataBlockIterator.next());
+      blocksChunkHolder.reset();
+      return blockletScanner.scanBlocklet(blocksChunkHolder);
+    }
+    return null;
+  }
+
+
 }

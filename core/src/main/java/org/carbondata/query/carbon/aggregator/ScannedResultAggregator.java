@@ -32,7 +32,7 @@ public interface ScannedResultAggregator {
    * @param scannedResult scanned result
    * @return how many records was aggregated
    */
-  int aggregateData(AbstractScannedResult scannedResult);
+  int aggregateData(AbstractScannedResult scannedResult, int batchSize);
 
   /**
    * Below method will be used to get the aggregated result

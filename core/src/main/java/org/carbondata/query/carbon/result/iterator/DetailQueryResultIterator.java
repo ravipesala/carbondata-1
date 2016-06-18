@@ -19,6 +19,10 @@
 package org.carbondata.query.carbon.result.iterator;
 
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import org.carbondata.core.iterator.CarbonIterator;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
@@ -44,42 +48,51 @@ public class DetailQueryResultIterator extends AbstractDetailQueryResultIterator
    */
   private QueryResultPreparator<List<ListBasedResultWrapper>, Object> queryResultPreparator;
 
+  private ExecutorService execService = Executors.newFixedThreadPool(1);
+
+  private Future<BatchResult> future;
+
   public DetailQueryResultIterator(List<BlockExecutionInfo> infos,
       QueryExecutorProperties executerProperties, QueryModel queryModel,
-      InternalQueryExecutor queryExecutor) {
-    super(infos, executerProperties, queryModel, queryExecutor);
+      QueryResultPreparator queryResultPreparator) {
+    super(infos, executerProperties, queryModel);
     this.queryResultPreparator =
         new DetailQueryResultPreparatorImpl(executerProperties, queryModel);
   }
 
   @Override public BatchResult next() {
-    currentCounter += updateSliceIndexToBeExecuted();
-    CarbonIterator<Result> result = null;
+    BatchResult result;
     try {
-      result = executor.executeQuery(blockExecutionInfos, blockIndexToBeExecuted, fileReader);
-    } catch (QueryExecutionException e) {
-      fileReader.finish();
-      throw new RuntimeException(e.getCause().getMessage());
-    }
-    for (int i = 0; i < blockIndexToBeExecuted.length; i++) {
-      if (blockIndexToBeExecuted[i] != -1) {
-        blockExecutionInfos.get(blockIndexToBeExecuted[i]).setFirstDataBlock(
-            blockExecutionInfos.get(blockIndexToBeExecuted[i]).getFirstDataBlock()
-                .getNextDataRefNode());
+      if (future == null) {
+        future = execute();
       }
-    }
-    if(!hasNext()) {
-      fileReader.finish();
-    }
-    if (null != result) {
-      Result next = result.next();
-      if (next.size() > 0) {
-        return queryResultPreparator.prepareQueryResult(next);
+      result = future.get();
+      nextBatch = false;
+      if (hasNext()) {
+        nextBatch = true;
+        future = execute();
       } else {
-        return new BatchResult();
+        fileReader.finish();
       }
-    } else {
-      return new BatchResult();
+    } catch (Exception ex) {
+      fileReader.finish();
+      throw new RuntimeException(ex.getCause().getMessage());
     }
+    return result;
+  }
+
+  private Future<BatchResult> execute() {
+    return execService.submit(new Callable<BatchResult>() {
+      @Override public BatchResult call() throws QueryExecutionException {
+        BatchResult batchResult;
+        Result next = dataBlockProcessor.next();
+        if (null != next) {
+          batchResult = queryResultPreparator.prepareQueryResult(next);
+        } else {
+          batchResult = queryResultPreparator.prepareQueryResult(null);
+        }
+        return batchResult;
+      }
+    });
   }
 }
