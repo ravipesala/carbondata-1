@@ -75,6 +75,7 @@ public class RawQueryResultPreparatorImpl
         row = new Object[msrSize + 1];
         row[0] = scannedResult.getKey();
         if (value != null) {
+          assert (value.length == msrSize);
           System.arraycopy(value, 0, row, 1, msrSize);
         }
         resultData[counter] = row;
