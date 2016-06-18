@@ -69,7 +69,7 @@ public abstract class AbstractDetailQueryResultIterator extends CarbonIterator {
    */
   protected FileHolder fileReader;
 
-  protected AbstractDataBlockIterator dataBlockProcessor;
+  protected AbstractDataBlockIterator dataBlockIterator;
 
   protected boolean nextBatch = false;
 
@@ -93,7 +93,7 @@ public abstract class AbstractDetailQueryResultIterator extends CarbonIterator {
     intialiseInfos();
   }
 
-  protected void intialiseInfos() {
+  private void intialiseInfos() {
     for (BlockExecutionInfo blockInfo : blockExecutionInfos) {
       DataRefNodeFinder finder = new BTreeDataRefNodeFinder(blockInfo.getEachColumnValueSize());
       DataRefNode startDataBlock = finder
@@ -107,21 +107,21 @@ public abstract class AbstractDetailQueryResultIterator extends CarbonIterator {
   }
 
   @Override public boolean hasNext() {
-    if ((dataBlockProcessor != null && dataBlockProcessor.hasNext()) || nextBatch) {
+    if ((dataBlockIterator != null && dataBlockIterator.hasNext()) || nextBatch) {
       return true;
     } else {
-      dataBlockProcessor = getDataBlockProcessor();
-      while (dataBlockProcessor != null) {
-        if (dataBlockProcessor.hasNext()) {
+      dataBlockIterator = getDataBlockIterator();
+      while (dataBlockIterator != null) {
+        if (dataBlockIterator.hasNext()) {
           return true;
         }
-        dataBlockProcessor = getDataBlockProcessor();
+        dataBlockIterator = getDataBlockIterator();
       }
       return false;
     }
   }
 
-  private DataBlockIteratorImpl getDataBlockProcessor() {
+  private DataBlockIteratorImpl getDataBlockIterator() {
     if(blockExecutionInfos.size() > 0) {
       BlockExecutionInfo executionInfo = blockExecutionInfos.get(0);
       blockExecutionInfos.remove(executionInfo);

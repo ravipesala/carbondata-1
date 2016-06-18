@@ -29,7 +29,6 @@ import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
 import org.carbondata.query.carbon.model.QueryModel;
 import org.carbondata.query.carbon.result.BatchResult;
 import org.carbondata.query.carbon.result.ListBasedResultWrapper;
-import org.carbondata.query.carbon.result.Result;
 import org.carbondata.query.carbon.result.preparator.QueryResultPreparator;
 
 /**
@@ -78,14 +77,7 @@ public class DetailQueryResultIterator extends AbstractDetailQueryResultIterator
   private Future<BatchResult> execute() {
     return execService.submit(new Callable<BatchResult>() {
       @Override public BatchResult call() throws QueryExecutionException {
-        BatchResult batchResult;
-        Result next = dataBlockProcessor.next();
-        if (null != next) {
-          batchResult = queryResultPreparator.prepareQueryResult(next);
-        } else {
-          batchResult = queryResultPreparator.prepareQueryResult(null);
-        }
-        return batchResult;
+        return queryResultPreparator.prepareQueryResult(dataBlockIterator.next());
       }
     });
   }

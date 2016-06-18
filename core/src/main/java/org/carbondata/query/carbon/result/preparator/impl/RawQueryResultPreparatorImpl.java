@@ -59,8 +59,7 @@ public class RawQueryResultPreparatorImpl
   @Override public BatchResult prepareQueryResult(
       Result<List<ListBasedResultWrapper>, Object> scannedResult) {
     if ((null == scannedResult || scannedResult.size() < 1)) {
-      BatchRawResult batchRawResult = new BatchRawResult();
-      return batchRawResult;
+      return new BatchRawResult();
     }
     QueryDimension[] queryDimensions = querySchemaInfo.getQueryDimensions();
     int msrSize = queryExecuterProperties.measureDataTypes.length;
@@ -99,8 +98,10 @@ public class RawQueryResultPreparatorImpl
               DirectDictionaryGenerator directDictionaryGenerator =
                   DirectDictionaryKeyGeneratorFactory.getDirectDictionaryGenerator(
                       queryDimensions[i].getDimension().getDataType());
-              row[order[i]] = directDictionaryGenerator.getValueFromSurrogate(
-                  (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()]);
+              if (directDictionaryGenerator != null) {
+                row[order[i]] = directDictionaryGenerator.getValueFromSurrogate(
+                    (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()]);
+              }
             } else {
               row[order[i]] =
                   (int) surrogateResult[queryDimensions[i].getDimension().getKeyOrdinal()];
