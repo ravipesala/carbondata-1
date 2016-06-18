@@ -24,7 +24,7 @@ import org.carbondata.query.carbon.result.Result;
 /**
  * Interface which will be used to aggregate the scan result
  */
-public interface ScannedResultAggregator {
+public interface ScannedResultCollector {
 
   /**
    * Below method will be used to aggregate the scanned result
@@ -32,12 +32,12 @@ public interface ScannedResultAggregator {
    * @param scannedResult scanned result
    * @return how many records was aggregated
    */
-  int aggregateData(AbstractScannedResult scannedResult, int batchSize);
+  int collectData(AbstractScannedResult scannedResult, int batchSize);
 
   /**
    * Below method will be used to get the aggregated result
    *
    * @return
    */
-  Result getAggregatedResult();
+  Result getCollectedResult();
 }

@@ -26,7 +26,7 @@ import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.carbon.datastore.chunk.MeasureColumnDataChunk;
 import org.carbondata.core.carbon.metadata.datatype.DataType;
 import org.carbondata.core.keygenerator.KeyGenException;
-import org.carbondata.query.carbon.aggregator.ScannedResultAggregator;
+import org.carbondata.query.carbon.aggregator.ScannedResultCollector;
 import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
 import org.carbondata.query.carbon.executor.infos.KeyStructureInfo;
 import org.carbondata.query.carbon.executor.util.QueryUtil;
@@ -40,24 +40,17 @@ import org.carbondata.query.carbon.wrappers.ByteArrayWrapper;
 /**
  * It is not a aggregator it is just a scanned result holder.
  *
- * @TODO change it to some other name
  */
-public class ListBasedResultAggregator implements ScannedResultAggregator {
+public class ListBasedResultCollector implements ScannedResultCollector {
 
   private static final LogService LOGGER =
-      LogServiceFactory.getLogService(ListBasedResultAggregator.class.getName());
+      LogServiceFactory.getLogService(ListBasedResultCollector.class.getName());
 
   /**
    * to keep a track of number of row processed to handle limit push down in
    * case of detail query scenario
    */
   private int rowCounter;
-
-  /**
-   * number of records asked in limit query if -1 then its either is
-   * detail+order by query or detail query
-   */
-  private int limit;
 
   /**
    * dimension values list
@@ -94,8 +87,7 @@ public class ListBasedResultAggregator implements ScannedResultAggregator {
    */
   private DataType[] measureDatatypes;
 
-  public ListBasedResultAggregator(BlockExecutionInfo blockExecutionInfos) {
-    limit = blockExecutionInfos.getLimit();
+  public ListBasedResultCollector(BlockExecutionInfo blockExecutionInfos) {
     this.tableBlockExecutionInfos = blockExecutionInfos;
     restructureInfos = blockExecutionInfos.getKeyStructureInfo();
     measuresOrdinal = tableBlockExecutionInfos.getAggregatorInfo().getMeasureOrdinals();
@@ -111,7 +103,7 @@ public class ListBasedResultAggregator implements ScannedResultAggregator {
    * @param scanned result
    *
    */
-  public int aggregateData(AbstractScannedResult scannedResult, int batchSize) {
+  public int collectData(AbstractScannedResult scannedResult, int batchSize) {
     this.listBasedResult =
         new ArrayList<>(batchSize);
     boolean isMsrsPresent = measureDatatypes.length > 0;
@@ -177,7 +169,7 @@ public class ListBasedResultAggregator implements ScannedResultAggregator {
   /**
    * Below method will used to get the result
    */
-  @Override public Result getAggregatedResult() {
+  @Override public Result getCollectedResult() {
     Result<List<ListBasedResultWrapper>, Object> result = new ListBasedResult();
     if (!tableBlockExecutionInfos.isFixedKeyUpdateRequired()) {
       updateKeyWithLatestBlockKeyGenerator();

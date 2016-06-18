@@ -30,10 +30,10 @@ import org.carbondata.core.datastorage.store.FileHolder;
 import org.carbondata.core.datastorage.store.impl.FileFactory;
 import org.carbondata.core.iterator.CarbonIterator;
 import org.carbondata.core.util.CarbonProperties;
-import org.carbondata.query.carbon.executor.impl.QueryExecutorProperties;
 import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
 import org.carbondata.query.carbon.executor.internal.InternalQueryExecutor;
 import org.carbondata.query.carbon.model.QueryModel;
+import org.carbondata.query.carbon.processor.AbstractDataBlockIterator;
 import org.carbondata.query.carbon.processor.impl.DataBlockIteratorImpl;
 
 /**
@@ -62,43 +62,32 @@ public abstract class AbstractDetailQueryResultIterator extends CarbonIterator {
   /**
    * number of cores which can be used
    */
-  private long numberOfCores;
+  private int batchSize;
 
   /**
    * file reader which will be used to execute the query
    */
   protected FileHolder fileReader;
 
-  /**
-   * block index to be executed
-   */
-  protected int[] blockIndexToBeExecuted;
-
-  protected DataBlockIteratorImpl dataBlockProcessor;
+  protected AbstractDataBlockIterator dataBlockProcessor;
 
   protected boolean nextBatch = false;
 
-  public AbstractDetailQueryResultIterator(List<BlockExecutionInfo> infos,
-      QueryExecutorProperties executerProperties, QueryModel queryModel) {
-    int recordSize = 0;
-    String defaultInMemoryRecordsSize =
-        CarbonProperties.getInstance().getProperty(CarbonCommonConstants.INMEMORY_REOCRD_SIZE);
-    if (null != defaultInMemoryRecordsSize) {
+  public AbstractDetailQueryResultIterator(List<BlockExecutionInfo> infos, QueryModel queryModel) {
+    String batchSizeString =
+        CarbonProperties.getInstance().getProperty(CarbonCommonConstants.DETAIL_QUERY_BATCH_SIZE);
+    if (null != batchSizeString) {
       try {
-        recordSize = Integer.parseInt(defaultInMemoryRecordsSize);
+        batchSize = Integer.parseInt(batchSizeString);
       } catch (NumberFormatException ne) {
         LOGGER.error("Invalid inmemory records size. Using default value");
-        recordSize = CarbonCommonConstants.INMEMORY_REOCRD_SIZE_DEFAULT;
+        batchSize = CarbonCommonConstants.DETAIL_QUERY_BATCH_SIZE_DEFAULT;
       }
+    } else {
+      batchSize = CarbonCommonConstants.DETAIL_QUERY_BATCH_SIZE_DEFAULT;
     }
-    this.numberOfCores = recordSize / Integer.parseInt(CarbonProperties.getInstance()
-        .getProperty(CarbonCommonConstants.BLOCKLET_SIZE,
-            CarbonCommonConstants.BLOCKLET_SIZE_DEFAULT_VAL));
-    if (numberOfCores == 0) {
-      numberOfCores++;
-    }
+
     this.blockExecutionInfos = infos;
-    this.blockIndexToBeExecuted = new int[(int) numberOfCores];
     this.fileReader = FileFactory.getFileHolder(
         FileFactory.getFileType(queryModel.getAbsoluteTableIdentifier().getStorePath()));
     intialiseInfos();
@@ -136,7 +125,7 @@ public abstract class AbstractDetailQueryResultIterator extends CarbonIterator {
     if(blockExecutionInfos.size() > 0) {
       BlockExecutionInfo executionInfo = blockExecutionInfos.get(0);
       blockExecutionInfos.remove(executionInfo);
-      return new DataBlockIteratorImpl(executionInfo, fileReader, 5000);
+      return new DataBlockIteratorImpl(executionInfo, fileReader, batchSize);
     }
     return null;
   }

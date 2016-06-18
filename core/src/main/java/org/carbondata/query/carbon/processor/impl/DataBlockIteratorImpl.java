@@ -44,11 +44,11 @@ public class DataBlockIteratorImpl extends AbstractDataBlockIterator {
    * @return Result of @batchSize
    */
   public Result next() {
-    this.scannerResultAggregator.aggregateData(scannedResult, batchSize);
-    Result result = this.scannerResultAggregator.getAggregatedResult();
+    this.scannerResultAggregator.collectData(scannedResult, batchSize);
+    Result result = this.scannerResultAggregator.getCollectedResult();
     while (result.size() < batchSize && hasNext()) {
-      this.scannerResultAggregator.aggregateData(scannedResult, batchSize-result.size());
-      result.merge(this.scannerResultAggregator.getAggregatedResult());
+      this.scannerResultAggregator.collectData(scannedResult, batchSize-result.size());
+      result.merge(this.scannerResultAggregator.getCollectedResult());
     }
     return result;
   }

@@ -39,7 +39,7 @@ public class DetailQueryExecutor extends AbstractQueryExecutor {
       throws QueryExecutionException {
     List<BlockExecutionInfo> blockExecutionInfoList = getBlockExecutionInfos(queryModel);
     return new ChunkRowIterator(
-        new DetailQueryResultIterator(blockExecutionInfoList, queryProperties, queryModel,
+        new DetailQueryResultIterator(blockExecutionInfoList, queryModel,
             new DetailQueryResultPreparatorImpl(queryProperties, queryModel)));
   }
 

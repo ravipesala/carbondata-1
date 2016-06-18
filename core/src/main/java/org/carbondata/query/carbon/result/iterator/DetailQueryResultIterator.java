@@ -25,7 +25,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
-import org.carbondata.query.carbon.executor.impl.QueryExecutorProperties;
 import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
 import org.carbondata.query.carbon.model.QueryModel;
 import org.carbondata.query.carbon.result.BatchResult;
@@ -49,10 +48,9 @@ public class DetailQueryResultIterator extends AbstractDetailQueryResultIterator
 
   private Future<BatchResult> future;
 
-  public DetailQueryResultIterator(List<BlockExecutionInfo> infos,
-      QueryExecutorProperties executerProperties, QueryModel queryModel,
+  public DetailQueryResultIterator(List<BlockExecutionInfo> infos, QueryModel queryModel,
       QueryResultPreparator queryResultPreparator) {
-    super(infos, executerProperties, queryModel);
+    super(infos, queryModel);
     this.queryResultPreparator = queryResultPreparator;
   }
 

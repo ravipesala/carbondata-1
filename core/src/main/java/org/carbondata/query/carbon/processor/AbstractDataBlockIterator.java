@@ -23,8 +23,8 @@ import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.carbon.datastore.DataRefNode;
 import org.carbondata.core.datastorage.store.FileHolder;
 import org.carbondata.core.iterator.CarbonIterator;
-import org.carbondata.query.carbon.aggregator.ScannedResultAggregator;
-import org.carbondata.query.carbon.aggregator.impl.ListBasedResultAggregator;
+import org.carbondata.query.carbon.aggregator.ScannedResultCollector;
+import org.carbondata.query.carbon.aggregator.impl.ListBasedResultCollector;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
 import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
 import org.carbondata.query.carbon.result.AbstractScannedResult;
@@ -54,7 +54,7 @@ public abstract class AbstractDataBlockIterator extends CarbonIterator<Result> {
   /**
    * result aggregator which will be used to aggregate the scanned result
    */
-  protected ScannedResultAggregator scannerResultAggregator;
+  protected ScannedResultCollector scannerResultAggregator;
 
   /**
    * processor which will be used to process the block processing can be
@@ -90,7 +90,7 @@ public abstract class AbstractDataBlockIterator extends CarbonIterator<Result> {
     }
 
     this.scannerResultAggregator =
-        new ListBasedResultAggregator(blockExecutionInfo);
+        new ListBasedResultCollector(blockExecutionInfo);
     this.batchSize = batchSize;
   }
 
