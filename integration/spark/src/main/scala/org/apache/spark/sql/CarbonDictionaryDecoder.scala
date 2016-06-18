@@ -159,6 +159,7 @@ case class CarbonDictionaryDecoder(
               .createCache(CacheType.FORWARD_DICTIONARY, storePath)
           val dicts: Seq[Dictionary] = getDictionary(absoluteTableIdentifiers,
             forwardDictionaryCache)
+          val dictIndex = dicts.zipWithIndex.filter(x => x._1 != null).map(x => x._2)
           new Iterator[InternalRow] {
             val unsafeProjection = UnsafeProjection.create(output.map(_.dataType).toArray)
             override final def hasNext: Boolean = iter.hasNext
@@ -166,12 +167,12 @@ case class CarbonDictionaryDecoder(
             override final def next(): InternalRow = {
               val row: InternalRow = iter.next()
               val data = row.toSeq(dataTypes).toArray
-              for (i <- data.indices) {
-                if (dicts(i) != null && data(i) != null) {
-                  data(i) = DataTypeUtil
-                    .getDataBasedOnDataType(dicts(i)
-                      .getDictionaryValueForKey(data(i).asInstanceOf[Integer]),
-                      getDictionaryColumnIds(i)._3)
+              dictIndex.foreach { index =>
+                if (data(index) != null) {
+                  data(index) = DataTypeUtil
+                    .getDataBasedOnDataType(dicts(index)
+                      .getDictionaryValueForKey(data(index).asInstanceOf[Int]),
+                      getDictionaryColumnIds(index)._3)
                 }
               }
               unsafeProjection(row)

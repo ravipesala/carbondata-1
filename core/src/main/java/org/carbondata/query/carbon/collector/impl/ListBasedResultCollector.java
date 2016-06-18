@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.carbondata.query.carbon.aggregator.impl;
+package org.carbondata.query.carbon.collector.impl;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +26,7 @@ import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.carbon.datastore.chunk.MeasureColumnDataChunk;
 import org.carbondata.core.carbon.metadata.datatype.DataType;
 import org.carbondata.core.keygenerator.KeyGenException;
-import org.carbondata.query.carbon.aggregator.ScannedResultCollector;
+import org.carbondata.query.carbon.collector.ScannedResultCollector;
 import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
 import org.carbondata.query.carbon.executor.infos.KeyStructureInfo;
 import org.carbondata.query.carbon.executor.util.QueryUtil;
@@ -38,7 +38,7 @@ import org.carbondata.query.carbon.util.DataTypeUtil;
 import org.carbondata.query.carbon.wrappers.ByteArrayWrapper;
 
 /**
- * It is not a aggregator it is just a scanned result holder.
+ * It is not a collector it is just a scanned result holder.
  *
  */
 public class ListBasedResultCollector implements ScannedResultCollector {
@@ -136,7 +136,7 @@ public class ListBasedResultCollector implements ScannedResultCollector {
   private void fillMeasureData(Object[] msrValues, AbstractScannedResult scannedResult) {
     for (short i = 0; i < measuresOrdinal.length; i++) {
       // if measure exists is block then pass measure column
-      // data chunk to the aggregator
+      // data chunk to the collector
       if (isMeasureExistsInCurrentBlock[i]) {
         msrValues[i] =
             getMeasureData(scannedResult.getMeasureChunk(measuresOrdinal[i]),

@@ -23,8 +23,8 @@ import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.carbon.datastore.DataRefNode;
 import org.carbondata.core.datastorage.store.FileHolder;
 import org.carbondata.core.iterator.CarbonIterator;
-import org.carbondata.query.carbon.aggregator.ScannedResultCollector;
-import org.carbondata.query.carbon.aggregator.impl.ListBasedResultCollector;
+import org.carbondata.query.carbon.collector.ScannedResultCollector;
+import org.carbondata.query.carbon.collector.impl.ListBasedResultCollector;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
 import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
 import org.carbondata.query.carbon.result.AbstractScannedResult;
@@ -52,7 +52,7 @@ public abstract class AbstractDataBlockIterator extends CarbonIterator<Result> {
   protected BlockExecutionInfo blockExecutionInfo;
 
   /**
-   * result aggregator which will be used to aggregate the scanned result
+   * result collector which will be used to aggregate the scanned result
    */
   protected ScannedResultCollector scannerResultAggregator;
 

@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.carbondata.query.carbon.aggregator;
+package org.carbondata.query.carbon.collector;
 
 import org.carbondata.query.carbon.result.AbstractScannedResult;
 import org.carbondata.query.carbon.result.Result;
