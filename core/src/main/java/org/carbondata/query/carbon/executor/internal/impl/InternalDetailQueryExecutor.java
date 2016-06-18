@@ -18,17 +18,12 @@
  */
 package org.carbondata.query.carbon.executor.internal.impl;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 import org.carbondata.common.logging.LogService;
 import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.constants.CarbonCommonConstants;
+import org.carbondata.core.datastorage.store.FileHolder;
 import org.carbondata.core.iterator.CarbonIterator;
 import org.carbondata.core.util.CarbonProperties;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
@@ -89,41 +84,29 @@ public class InternalDetailQueryExecutor implements InternalQueryExecutor {
    */
   @Override public CarbonIterator<Result> executeQuery(
       List<BlockExecutionInfo> executionInfos,
-      int[] sliceIndexes) throws QueryExecutionException {
+      int[] sliceIndexes, FileHolder fileReader) throws QueryExecutionException {
     long startTime = System.currentTimeMillis();
     QueryRunner task;
     ScannedResultMerger scannedResultProcessor =
         new UnSortedScannedResultMerger(executionInfos.get(executionInfos.size() - 1),
             sliceIndexes.length);
-    ExecutorService execService = Executors.newFixedThreadPool(numberOfCores);
-    List<Future> listFutureObjects = new ArrayList<Future>();
     try {
       for (int currentSliceIndex : sliceIndexes) {
         if (currentSliceIndex == -1) {
           continue;
         }
         executionInfos.get(currentSliceIndex).setScannedResultProcessor(scannedResultProcessor);
-        task = new QueryRunner(executionInfos.get(currentSliceIndex));
-        listFutureObjects.add(execService.submit(task));
-      }
-      execService.shutdown();
-      execService.awaitTermination(2, TimeUnit.DAYS);
-      LOGGER.info("Total time taken for scan " + (System.currentTimeMillis() - startTime));
-      for (Future future : listFutureObjects) {
+        task = new QueryRunner(executionInfos.get(currentSliceIndex), fileReader);
         try {
-          future.get();
-        } catch (ExecutionException e) {
+          task.call();
+        } catch (Exception e) {
           throw new QueryExecutionException(e.getMessage());
         }
       }
+      LOGGER.info("Total time taken for scan " + (System.currentTimeMillis() - startTime));
       return scannedResultProcessor.getQueryResultIterator();
     } catch (QueryExecutionException exception) {
       throw new QueryExecutionException(exception);
-    } catch (InterruptedException e) {
-      LOGGER.error(e, e.getMessage());
-      throw new QueryExecutionException(e);
-    } finally {
-      execService = null;
     }
   }
 

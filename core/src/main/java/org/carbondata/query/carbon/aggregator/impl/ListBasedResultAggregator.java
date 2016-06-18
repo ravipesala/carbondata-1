@@ -113,12 +113,12 @@ public class ListBasedResultAggregator implements ScannedResultAggregator {
    */
   public int aggregateData(AbstractScannedResult scannedResult) {
     this.listBasedResult =
-        new ArrayList<>(limit == -1 ? scannedResult.numberOfOutputRows() : limit);
+        new ArrayList<>(scannedResult.numberOfOutputRows());
     boolean isMsrsPresent = measureDatatypes.length > 0;
     ByteArrayWrapper wrapper = null;
     // scan the record and add to list
     ListBasedResultWrapper resultWrapper;
-    while (scannedResult.hasNext() && (limit == -1 || rowCounter < limit)) {
+    while (scannedResult.hasNext()) {
       resultWrapper = new ListBasedResultWrapper();
       if(tableBlockExecutionInfos.isDimensionsExistInQuery()) {
         wrapper = new ByteArrayWrapper();

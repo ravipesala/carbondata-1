@@ -27,6 +27,8 @@ import org.carbondata.core.carbon.datastore.DataRefNode;
 import org.carbondata.core.carbon.datastore.DataRefNodeFinder;
 import org.carbondata.core.carbon.datastore.impl.btree.BTreeDataRefNodeFinder;
 import org.carbondata.core.constants.CarbonCommonConstants;
+import org.carbondata.core.datastorage.store.FileHolder;
+import org.carbondata.core.datastorage.store.impl.FileFactory;
 import org.carbondata.core.iterator.CarbonIterator;
 import org.carbondata.core.util.CarbonProperties;
 import org.carbondata.query.carbon.executor.impl.QueryExecutorProperties;
@@ -83,6 +85,11 @@ public abstract class AbstractDetailQueryResultIterator extends CarbonIterator {
   private long[] numberOfBlockletExecutedPerBlock;
 
   /**
+   * file reader which will be used to execute the query
+   */
+  protected FileHolder fileReader;
+
+  /**
    * block index to be executed
    */
   protected int[] blockIndexToBeExecuted;
@@ -110,6 +117,8 @@ public abstract class AbstractDetailQueryResultIterator extends CarbonIterator {
     executor = queryExecutor;
     this.blockExecutionInfos = infos;
     this.blockIndexToBeExecuted = new int[(int) numberOfCores];
+    this.fileReader = FileFactory.getFileHolder(
+        FileFactory.getFileType(queryModel.getAbsoluteTableIdentifier().getStorePath()));
     intialiseInfos();
   }
 

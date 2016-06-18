@@ -58,37 +58,39 @@ public class DetailRawQueryResultIterator extends AbstractDetailQueryResultItera
 
   @Override public BatchResult next() {
     BatchResult result;
-    if (future == null) {
-      future = execute();
-    }
-    ResultInfo resultFromFuture = getResultFromFuture(future);
-    result = resultFromFuture.result;
-    currentCounter += resultFromFuture.counter;
-    if (hasNext()) {
-      future = execute();
+    try {
+      if (future == null) {
+        future = execute();
+      }
+      ResultInfo resultFromFuture = getResultFromFuture(future);
+      result = resultFromFuture.result;
+      currentCounter += resultFromFuture.counter;
+      if (hasNext()) {
+        future = execute();
+      } else {
+        fileReader.finish();
+      }
+    } catch (QueryExecutionException e) {
+      fileReader.finish();
+      throw new RuntimeException(e.getCause().getMessage());
     }
     return result;
   }
 
-  private ResultInfo getResultFromFuture(Future<ResultInfo> future) {
+  private ResultInfo getResultFromFuture(Future<ResultInfo> future) throws QueryExecutionException {
     try {
       return future.get();
     } catch (Exception e) {
-      e.printStackTrace();
+      throw new QueryExecutionException(e.getMessage());
     }
-    return new ResultInfo();
   }
 
   private Future<ResultInfo> execute() {
     return execService.submit(new Callable<ResultInfo>() {
-      @Override public ResultInfo call() {
-        CarbonIterator<Result> result = null;
-        int counter =  updateSliceIndexToBeExecuted();
-        try {
-          result = executor.executeQuery(blockExecutionInfos, blockIndexToBeExecuted);
-        } catch (QueryExecutionException ex) {
-          throw new RuntimeException(ex.getCause());
-        }
+      @Override public ResultInfo call() throws QueryExecutionException {
+        int counter = updateSliceIndexToBeExecuted();
+        CarbonIterator<Result> result =
+            executor.executeQuery(blockExecutionInfos, blockIndexToBeExecuted, fileReader);
         for (int i = 0; i < blockIndexToBeExecuted.length; i++) {
           if (blockIndexToBeExecuted[i] != -1) {
             blockExecutionInfos.get(blockIndexToBeExecuted[i]).setFirstDataBlock(

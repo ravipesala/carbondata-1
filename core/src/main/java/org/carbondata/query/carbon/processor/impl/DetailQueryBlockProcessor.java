@@ -59,10 +59,6 @@ public class DetailQueryBlockProcessor extends AbstractDataBlockProcessor {
       blocksChunkHolder.reset();
       counter += this.scannerResultAggregator
           .aggregateData(blockletScanner.scanBlocklet(blocksChunkHolder));
-      //      finishScanning();
-      if (blockExecutionInfo.getLimit() != -1 && counter >= blockExecutionInfo.getLimit()) {
-        break;
-      }
     }
     finishScanning();
   }

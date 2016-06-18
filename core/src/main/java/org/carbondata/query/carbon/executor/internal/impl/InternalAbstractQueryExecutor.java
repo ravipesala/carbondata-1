@@ -31,6 +31,7 @@ import org.carbondata.common.logging.LogServiceFactory;
 import org.carbondata.core.carbon.datastore.DataRefNode;
 import org.carbondata.core.carbon.datastore.DataRefNodeFinder;
 import org.carbondata.core.carbon.datastore.impl.btree.BTreeDataRefNodeFinder;
+import org.carbondata.core.datastorage.store.FileHolder;
 import org.carbondata.core.iterator.CarbonIterator;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
 import org.carbondata.query.carbon.executor.infos.BlockExecutionInfo;
@@ -66,13 +67,13 @@ public abstract class InternalAbstractQueryExecutor implements InternalQueryExec
    * and it will return iterator over result
    *
    * @param tableBlockExecutionInfosList block execution info which will have all the properties
-   *                       required for query execution
-   * @param sliceIndex   slice indexes to be executed in this case it w
+   *                                     required for query execution
+   * @param sliceIndex                   slice indexes to be executed in this case it w
    * @return query result
    */
   @Override public CarbonIterator<Result> executeQuery(
-      List<BlockExecutionInfo> tableBlockExecutionInfosList, int[] sliceIndex)
-      throws QueryExecutionException {
+      List<BlockExecutionInfo> tableBlockExecutionInfosList, int[] sliceIndex,
+      FileHolder fileReader) throws QueryExecutionException {
 
     long startTime = System.currentTimeMillis();
     BlockExecutionInfo latestInfo =
@@ -92,7 +93,7 @@ public abstract class InternalAbstractQueryExecutor implements InternalQueryExec
         blockInfo.setFirstDataBlock(startDataBlock);
         blockInfo.setNumberOfBlockToScan(numberOfBlockToScan);
         blockInfo.setScannedResultProcessor(scannedResultProcessor);
-        listFutureObjects.add(execService.submit(new QueryRunner(blockInfo)));
+        listFutureObjects.add(execService.submit(new QueryRunner(blockInfo, fileReader)));
       }
       execService.shutdown();
       execService.awaitTermination(2, TimeUnit.DAYS);
