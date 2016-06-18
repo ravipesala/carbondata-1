@@ -168,13 +168,13 @@ case class CarbonDictionaryDecoder(
               val data = row.toSeq(dataTypes).toArray
               for (i <- data.indices) {
                 if (dicts(i) != null && data(i) != null) {
-                  data(i) = toType(DataTypeUtil
+                  data(i) = DataTypeUtil
                     .getDataBasedOnDataType(dicts(i)
                       .getDictionaryValueForKey(data(i).asInstanceOf[Integer]),
-                      getDictionaryColumnIds(i)._3))
+                      getDictionaryColumnIds(i)._3)
                 }
               }
-              unsafeProjection(new GenericMutableRow(data))
+              unsafeProjection(row)
             }
           }
         }
@@ -188,13 +188,6 @@ case class CarbonDictionaryDecoder(
     getDictionaryColumnIds.find(p => p._1 != null) match {
       case Some(value) => true
       case _ => false
-    }
-  }
-
-  private def toType(obj: Any): Any = {
-    obj match {
-      case s: String => UTF8String.fromString(s)
-      case _ => obj
     }
   }
 
