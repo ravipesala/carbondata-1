@@ -21,6 +21,10 @@ public abstract class AbstractDictionaryDecodedReadSupport<T> implements CarbonR
   protected Dictionary[] dictionaries;
 
   protected DataType[] dataTypes;
+  /**
+   * carbon columns
+   */
+  protected CarbonColumn[] carbonColumns;
 
   /**
    * It would be instantiated in side the task so the dictionary would be loaded inside every mapper
@@ -31,18 +35,20 @@ public abstract class AbstractDictionaryDecodedReadSupport<T> implements CarbonR
    */
   @Override public void intialize(CarbonColumn[] carbonColumns,
       AbsoluteTableIdentifier absoluteTableIdentifier) {
+    this.carbonColumns = carbonColumns;
     dictionaries = new Dictionary[carbonColumns.length];
     dataTypes = new DataType[carbonColumns.length];
     for (int i = 0; i < carbonColumns.length; i++) {
-      if (carbonColumns[i].hasEncoding(Encoding.DICTIONARY)) {
+      if (carbonColumns[i].hasEncoding(Encoding.DICTIONARY) && !carbonColumns[i]
+          .hasEncoding(Encoding.DIRECT_DICTIONARY)) {
         CacheProvider cacheProvider = CacheProvider.getInstance();
         Cache<DictionaryColumnUniqueIdentifier, Dictionary> forwardDictionaryCache = cacheProvider
             .createCache(CacheType.FORWARD_DICTIONARY, absoluteTableIdentifier.getStorePath());
         try {
           dataTypes[i] = carbonColumns[i].getDataType();
           dictionaries[i] = forwardDictionaryCache.get(new DictionaryColumnUniqueIdentifier(
-              absoluteTableIdentifier.getCarbonTableIdentifier(), carbonColumns[i].getColumnId(),
-              dataTypes[i]));
+              absoluteTableIdentifier.getCarbonTableIdentifier(),
+              carbonColumns[i].getColumnIdentifier(), dataTypes[i]));
         } catch (CarbonUtilException e) {
           throw new RuntimeException(e);
         }

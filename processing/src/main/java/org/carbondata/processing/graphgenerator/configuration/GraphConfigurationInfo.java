@@ -190,6 +190,8 @@ public class GraphConfigurationInfo {
 
   private Boolean[] isNoDictionaryDimMapping;
 
+  private String columnPropertiesString;
+
   /**
    * wrapper object holding the columnschemadetails
    */
@@ -203,7 +205,7 @@ public class GraphConfigurationInfo {
    * ~-> all ordinal with same group id
    */
   private String columnGroupsString;
-
+  private String columnsDataTypeString;
   /**
    * @return the connectionName
    */
@@ -997,5 +999,24 @@ public class GraphConfigurationInfo {
 
   public void setIsNoDictionaryDimMapping(Boolean[] isNoDictionaryDimMapping) {
     this.isNoDictionaryDimMapping = isNoDictionaryDimMapping;
+  }
+
+  public void setColumnPropertiesString(String columnPropertiesString) {
+    this.columnPropertiesString = columnPropertiesString;
+  }
+
+  public String getColumnPropertiesString() {
+    return this.columnPropertiesString;
+  }
+
+  /**
+   * @return columngroups
+   */
+  public String getDimensionColumnsDataType() {
+    return columnsDataTypeString;
+  }
+
+  public void setDimensionColumnsDataType(String columnsDataTypeString) {
+    this.columnsDataTypeString = columnsDataTypeString;
   }
 }

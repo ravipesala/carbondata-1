@@ -1,16 +1,9 @@
+# This github has been migrated to apache: https://github.com/apache/incubator-carbondata, please fork and raise PRs to apache github 
 # CarbonData
 CarbonData is a new Apache Hadoop native file format for faster 
 interactive query using advanced columnar storage, index, compression 
 and encoding techniques to improve computing efficiency, in turn it will 
 help speedup queries an order of magnitude faster over PetaBytes of data. 
-
-### Why CarbonData
-Based on the below requirements, we investigated existing file formats in the Hadoop eco-system, but we could not find a suitable solution that can satisfy all the requirements at the same time,so we start designing CarbonData. 
-* Requirement1:Support big scan & only fetch a few columns 
-* Requirement2:Support primary key lookup response in sub-second. 
-* Requirement3:Support interactive OLAP-style query over big data which involve many filters in a query, this type of workload should response in seconds. 
-* Requirement4:Support fast individual record extraction which fetch all columns of the record. 
-* Requirement5:Support HDFS so that customer can leverage existing Hadoop cluster. 
 
 ### Features
 CarbonData file format is a columnar store in HDFS, it has many features that a modern columnar format has, such as splittable, compression schema ,complex data type etc. And CarbonData has following unique features:
@@ -78,5 +71,11 @@ Read the [quick start](https://github.com/HuaweiBigData/carbondata/wiki/Quick-St
 This is an open source project for everyone, and we are always open to people who want to use this system or contribute to it. 
 This guide document introduce [how to contribute to CarbonData](https://github.com/HuaweiBigData/carbondata/wiki/How-to-contribute-and-Code-Style).
 
+### Contact us
+To get involved in CarbonData:
+
+* [Subscribe](mailto:dev-subscribe@carbondata.incubator.apache.org) then [mail](mailto:dev@carbondata.incubator.apache.org) to us
+* Report issues on [Jira](https://issues.apache.org/jira/browse/CARBONDATA).
+
 ### About
-CarbonData project original contributed from the [Huawei](http://www.huawei.com), in progress of donating this open source project to Apache Software Foundation for leveraging big data ecosystem. 
+CarbonData project original contributed from the [Huawei](http://www.huawei.com)

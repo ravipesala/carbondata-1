@@ -26,11 +26,12 @@ import java.util.Map;
 
 import org.carbondata.common.logging.LogService;
 import org.carbondata.common.logging.LogServiceFactory;
+import org.carbondata.core.carbon.metadata.CarbonMetadata;
+import org.carbondata.core.carbon.metadata.schema.table.CarbonTable;
+import org.carbondata.core.carbon.path.CarbonStorePath;
+import org.carbondata.core.carbon.path.CarbonTablePath;
 import org.carbondata.core.constants.CarbonCommonConstants;
-import org.carbondata.core.datastorage.store.filesystem.CarbonFile;
-import org.carbondata.core.datastorage.store.filesystem.CarbonFileFilter;
-import org.carbondata.core.datastorage.store.filesystem.HDFSCarbonFile;
-import org.carbondata.core.datastorage.store.filesystem.LocalCarbonFile;
+import org.carbondata.core.datastorage.store.filesystem.*;
 import org.carbondata.core.datastorage.store.impl.FileFactory;
 import org.carbondata.core.datastorage.store.impl.FileFactory.FileType;
 import org.carbondata.core.load.LoadMetadataDetails;
@@ -122,12 +123,7 @@ public final class CarbonDataProcessorUtil {
     } catch (IOException e1) {
       LOGGER.info("bad record folder does not exist");
     }
-    CarbonFile carbonFile = null;
-    if (fileType.equals(FileFactory.FileType.HDFS)) {
-      carbonFile = new HDFSCarbonFile(badLogStoreLocation);
-    } else {
-      carbonFile = new LocalCarbonFile(badLogStoreLocation);
-    }
+    CarbonFile carbonFile = FileFactory.getCarbonFile(badLogStoreLocation, fileType);
 
     CarbonFile[] listFiles = carbonFile.listFiles(new CarbonFileFilter() {
       @Override public boolean accept(CarbonFile pathname) {
@@ -253,5 +249,31 @@ public final class CarbonDataProcessorUtil {
     String modOrDelTimesStamp =
         builder.substring(0, builder.indexOf(CarbonCommonConstants.HASH_SPC_CHARACTER)).toString();
     return modOrDelTimesStamp;
+  }
+
+  /**
+   * This method will form the local data folder store location
+   *
+   * @param databaseName
+   * @param tableName
+   * @param taskId
+   * @param partitionId
+   * @param segmentId
+   * @return
+   */
+  public static String getLocalDataFolderLocation(String databaseName, String tableName,
+      String taskId, String partitionId, String segmentId) {
+    String tempLocationKey = databaseName + CarbonCommonConstants.UNDERSCORE + tableName
+        + CarbonCommonConstants.UNDERSCORE + taskId;
+    String baseStorePath = CarbonProperties.getInstance()
+        .getProperty(tempLocationKey, CarbonCommonConstants.STORE_LOCATION_DEFAULT_VAL);
+    CarbonTable carbonTable = CarbonMetadata.getInstance()
+        .getCarbonTable(databaseName + CarbonCommonConstants.UNDERSCORE + tableName);
+    CarbonTablePath carbonTablePath =
+        CarbonStorePath.getCarbonTablePath(baseStorePath, carbonTable.getCarbonTableIdentifier());
+    String carbonDataDirectoryPath =
+        carbonTablePath.getCarbonDataDirectoryPath(partitionId, segmentId + "");
+    String localDataLoadFolderLocation = carbonDataDirectoryPath + File.separator + taskId;
+    return localDataLoadFolderLocation;
   }
 }

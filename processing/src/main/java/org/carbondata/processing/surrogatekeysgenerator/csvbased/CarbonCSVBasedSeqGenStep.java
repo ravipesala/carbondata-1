@@ -49,8 +49,6 @@ import org.carbondata.core.carbon.metadata.CarbonMetadata;
 import org.carbondata.core.carbon.metadata.datatype.DataType;
 import org.carbondata.core.carbon.metadata.schema.table.CarbonTable;
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonMeasure;
-import org.carbondata.core.carbon.path.CarbonStorePath;
-import org.carbondata.core.carbon.path.CarbonTablePath;
 import org.carbondata.core.constants.CarbonCommonConstants;
 import org.carbondata.core.file.manager.composite.FileData;
 import org.carbondata.core.file.manager.composite.FileManager;
@@ -70,6 +68,7 @@ import org.carbondata.processing.schema.metadata.ColumnSchemaDetails;
 import org.carbondata.processing.schema.metadata.ColumnSchemaDetailsWrapper;
 import org.carbondata.processing.schema.metadata.ColumnsInfo;
 import org.carbondata.processing.schema.metadata.HierarchiesInfo;
+import org.carbondata.processing.util.CarbonDataProcessorUtil;
 import org.carbondata.processing.util.RemoveDictionaryUtil;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
@@ -243,6 +242,14 @@ public class CarbonCSVBasedSeqGenStep extends BaseStep {
    * to check whether column is a no dicitonary column or not
    */
   private boolean[] isNoDictionaryColumn;
+  /**
+   * to check whether column is a no dicitonary column or not
+   */
+  private boolean[] isStringDataType;
+  /**
+   * to check whether column is a no dicitonary column or not
+   */
+  private String[] dataTypes;
 
   /**
    * to check whether column is complex type column or not
@@ -360,10 +367,11 @@ public class CarbonCSVBasedSeqGenStep extends BaseStep {
           columnsInfo.setComplexTypesMap(meta.getComplexTypes());
           columnsInfo.setDimensionColumnIds(meta.getDimensionColumnIds());
           columnsInfo.setColumnSchemaDetailsWrapper(meta.getColumnSchemaDetailsWrapper());
+          columnsInfo.setColumnProperties(meta.getColumnPropertiesMap());
           updateBagLogFileName();
           String key = meta.getSchemaName() + '/' + meta.getCubeName() + '_' + meta.getTableName();
-          badRecordslogger = new BadRecordslogger(key, csvFilepath,
-              getBadLogStoreLocation(meta.getSchemaName() + '/' + meta.getCubeName()));
+          badRecordslogger = new BadRecordslogger(key, csvFilepath, getBadLogStoreLocation(
+              meta.getSchemaName() + '/' + meta.getCubeName() + "/" + meta.getTaskNo()));
 
           columnsInfo.setTimeOrdinalIndices(meta.timeOrdinalIndices);
           surrogateKeyGen = new FileStoreSurrogateKeyGenForCSV(columnsInfo, meta.getPartitionID(),
@@ -450,15 +458,15 @@ public class CarbonCSVBasedSeqGenStep extends BaseStep {
       }
 
       startReadingProcess(numberOfNodes);
-      CarbonUtil.writeLevelCardinalityFile(loadFolderLoc, meta.getTableName(),
-          getUpdatedCardinality());
       badRecordslogger.closeStreams();
       if (!meta.isAggregate()) {
         closeNormalizedHierFiles();
       }
       if (writeCounter == 0) {
-        putRow(data.getOutputRowMeta(), new Object[outSize]);
+        return processWhenRowIsNull();
       }
+      CarbonUtil.writeLevelCardinalityFile(loadFolderLoc, meta.getTableName(),
+          getUpdatedCardinality());
       LOGGER.info("Record Procerssed For table: " + meta.getTableName());
       String logMessage =
           "Summary: Carbon CSV Based Seq Gen Step : " + readCounter + ": Write: " + writeCounter;
@@ -479,9 +487,16 @@ public class CarbonCSVBasedSeqGenStep extends BaseStep {
     isNoDictionaryColumn = new boolean[metaColumnNames.length];
     isComplexTypeColumn = new boolean[metaColumnNames.length];
     noDictionaryAndComplexIndexMapping = new int[metaColumnNames.length];
+    isStringDataType = new boolean[metaColumnNames.length];
+    dataTypes= new String[metaColumnNames.length];
     complexTypes = new GenericDataType[meta.getComplexTypeColumns().length];
     for (int i = 0; i < meta.noDictionaryCols.length; i++) {
       for (int j = 0; j < metaColumnNames.length; j++) {
+        if (CarbonCommonConstants.DATATYPE_STRING
+            .equalsIgnoreCase(meta.dimColDataTypes.get(metaColumnNames[j]))) {
+          isStringDataType[j] = true;
+        }
+        dataTypes[j]=meta.dimColDataTypes.get(metaColumnNames[j].toLowerCase());
         if (meta.noDictionaryCols[i].equalsIgnoreCase(
             meta.getTableName() + CarbonCommonConstants.UNDERSCORE + metaColumnNames[j])) {
           isNoDictionaryColumn[j] = true;
@@ -680,19 +695,9 @@ public class CarbonCSVBasedSeqGenStep extends BaseStep {
    * Load Store location
    */
   private void updateStoreLocation() {
-    String tempLocationKey = meta.getSchemaName() + '_' + meta.getCubeName();
-    String baseStorePath = CarbonProperties.getInstance()
-        .getProperty(tempLocationKey, CarbonCommonConstants.STORE_LOCATION_DEFAULT_VAL);
-    CarbonTable carbonTable = CarbonMetadata.getInstance().getCarbonTable(
-        meta.getSchemaName() + CarbonCommonConstants.UNDERSCORE + meta.getTableName());
-    CarbonTablePath carbonTablePath =
-        CarbonStorePath.getCarbonTablePath(baseStorePath, carbonTable.getCarbonTableIdentifier());
-    String partitionId = meta.getPartitionID();
-    String carbonDataDirectoryPath = carbonTablePath.getCarbonDataDirectoryPath(partitionId,
-        meta.getSegmentId()+"");
-    carbonDataDirectoryPath =
-        carbonDataDirectoryPath + File.separator+ meta.getTaskNo();
-    loadFolderLoc = carbonDataDirectoryPath + CarbonCommonConstants.FILE_INPROGRESS_STATUS;
+    loadFolderLoc = CarbonDataProcessorUtil
+        .getLocalDataFolderLocation(meta.getSchemaName(), meta.getTableName(), meta.getTaskNo(),
+            meta.getPartitionID(), meta.getSegmentId()+"");
   }
 
   private String getBadLogStoreLocation(String storeLocation) {
@@ -837,7 +842,9 @@ public class CarbonCSVBasedSeqGenStep extends BaseStep {
   }
 
   private String getCarbonLocalBaseStoreLocation() {
-    String tempLocationKey = meta.getSchemaName() + '_' + meta.getCubeName();
+    String tempLocationKey =
+        meta.getSchemaName() + CarbonCommonConstants.UNDERSCORE + meta.getCubeName()
+            + CarbonCommonConstants.UNDERSCORE + meta.getTaskNo();
     String strLoc = CarbonProperties.getInstance()
         .getProperty(tempLocationKey, CarbonCommonConstants.STORE_LOCATION_DEFAULT_VAL);
     File f = new File(strLoc);
@@ -918,15 +925,12 @@ public class CarbonCSVBasedSeqGenStep extends BaseStep {
     for (int j = 0; j < inputColumnsSize; j++) {
       String columnName = metaColumnNames[j];
       String foreignKeyColumnName = foreignKeyMappingColumns[j];
-      r[j] = ((String) r[j]).trim();
-      // TODO check if it is ignore dictionary dimension or not . if yes directly write byte buffer
-
+      // check if it is ignore dictionary dimension or not . if yes directly write byte buffer
       if (isNoDictionaryColumn[j]) {
-        processnoDictionaryDim(noDictionaryAndComplexIndexMapping[j],
-            (String) r[j], byteBufferArr);
+        processnoDictionaryDim(noDictionaryAndComplexIndexMapping[j], (String) r[j], dataTypes[j],
+            isStringDataType[j], byteBufferArr);
         continue;
       }
-
       // There is a possibility that measure can be referred as dimensions also
       // so in that case we need to just copy the value into the measure column index.
       //if it enters here means 3 possibility
@@ -968,10 +972,9 @@ public class CarbonCSVBasedSeqGenStep extends BaseStep {
                   .getMeasureValueBasedOnDataType(msr, msrDataType[meta.msrMapping[msrCount]],
                       meta.carbonMeasures[meta.msrMapping[msrCount]]);
             } catch (NumberFormatException ex) {
-              badRecordslogger
-                  .addBadRecordsToBilder(r, inputColumnsSize, "Measure should be number",
-                      valueToCheckAgainst);
-              return null;
+              LOGGER.warn("Cant not convert : " + msr
+                  + " to Numeric type value. Value considered as null.");
+              out[memberMapping[dimLen - meta.complexTypes.size() + index]] = null;
             }
           }
         }
@@ -1166,13 +1169,13 @@ public class CarbonCSVBasedSeqGenStep extends BaseStep {
   private void addEntryToBadRecords(Object[] r, int inputRowSize, int j, String columnName) {
     badRecordslogger.addBadRecordsToBilder(r, inputRowSize,
         "Surrogate key for value " + " \"" + r[j] + "\"" + " with column name " + columnName
-            + " not found in dictionary cache", valueToCheckAgainst);
+            + " not found in dictionary cache", "null");
   }
 
   private void addMemberNotExistEntry(Object[] r, int inputRowSize, int j, String columnName) {
     badRecordslogger.addBadRecordsToBilder(r, inputRowSize,
         "For Coulmn " + columnName + " \"" + r[j] + "\""
-            + " member not exist in the dimension table ", valueToCheckAgainst);
+            + " member not exist in the dimension table ", "null");
   }
 
   private void insertHierIfRequired(Object[] out) throws KettleException {
@@ -1750,7 +1753,14 @@ public class CarbonCSVBasedSeqGenStep extends BaseStep {
     }
   }
 
-  private void processnoDictionaryDim(int index, String dimensionValue, ByteBuffer[] out) {
+  private void processnoDictionaryDim(int index, String dimensionValue, String dataType,
+      boolean isStringDataType, ByteBuffer[] out) {
+    if (!(isStringDataType)) {
+      if (null == DataTypeUtil
+          .getDataBasedOnDataType(dimensionValue, DataTypeUtil.getDataType(dataType))) {
+        dimensionValue = CarbonCommonConstants.MEMBER_DEFAULT_VAL;
+      }
+    }
     ByteBuffer buffer = ByteBuffer
         .wrap(dimensionValue.getBytes(Charset.forName(CarbonCommonConstants.DEFAULT_CHARSET)));
     buffer.rewind();

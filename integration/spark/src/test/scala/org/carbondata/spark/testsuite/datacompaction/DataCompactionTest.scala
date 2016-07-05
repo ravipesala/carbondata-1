@@ -7,11 +7,12 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.common.util.CarbonHiveContext._
 import org.apache.spark.sql.common.util.QueryTest
+import org.scalatest.BeforeAndAfterAll
+
 import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier}
 import org.carbondata.core.constants.CarbonCommonConstants
 import org.carbondata.core.util.CarbonProperties
 import org.carbondata.lcm.status.SegmentStatusManager
-import org.scalatest.BeforeAndAfterAll
 
 /**
   * FT for data compaction scenario.
@@ -21,7 +22,8 @@ class DataCompactionTest extends QueryTest with BeforeAndAfterAll {
   override def beforeAll {
     CarbonProperties.getInstance().addProperty("carbon.enable.load.merge", "true")
     sql("drop table if exists  normalcompaction")
-
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.CARBON_TIMESTAMP_FORMAT, "mm/dd/yyyy")
     sql(
       "CREATE TABLE IF NOT EXISTS normalcompaction (country String, ID Int, date Timestamp, name " +
         "String, " +
@@ -37,14 +39,12 @@ class DataCompactionTest extends QueryTest with BeforeAndAfterAll {
     var csvFilePath2 = currentDirectory + "/src/test/resources/compaction/compaction2.csv"
     var csvFilePath3 = currentDirectory + "/src/test/resources/compaction/compaction3.csv"
 
-    CarbonProperties.getInstance()
-      .addProperty(CarbonCommonConstants.CARBON_TIMESTAMP_FORMAT, "yyyy/mm/dd")
-    sql("LOAD DATA fact from '" + csvFilePath1 + "' INTO CUBE normalcompaction PARTITIONDATA" +
-      "(DELIMITER ',', QUOTECHAR '\"')"
+    sql("LOAD DATA LOCAL INPATH '" + csvFilePath1 + "' INTO TABLE normalcompaction OPTIONS" +
+      "('DELIMITER'= ',', 'QUOTECHAR'= '\"')"
     )
     CarbonProperties.getInstance().addProperty("carbon.enable.load.merge", "true")
-    sql("LOAD DATA fact from '" + csvFilePath2 + "' INTO CUBE normalcompaction  PARTITIONDATA" +
-      "(DELIMITER ',', QUOTECHAR '\"')"
+    sql("LOAD DATA LOCAL INPATH '" + csvFilePath2 + "' INTO TABLE normalcompaction  OPTIONS" +
+      "('DELIMITER'= ',', 'QUOTECHAR'= '\"')"
     )
     CarbonProperties.getInstance().addProperty("carbon.enable.load.merge", "true")
     System.out
@@ -52,8 +52,8 @@ class DataCompactionTest extends QueryTest with BeforeAndAfterAll {
         .getProperty("carbon.enable.load.merge")
       )
     // compaction will happen here.
-    sql("LOAD DATA fact from '" + csvFilePath3 + "' INTO CUBE normalcompaction  PARTITIONDATA" +
-      "(DELIMITER ',', QUOTECHAR '\"')"
+    sql("LOAD DATA LOCAL INPATH '" + csvFilePath3 + "' INTO TABLE normalcompaction  OPTIONS" +
+      "('DELIMITER'= ',', 'QUOTECHAR'= '\"')"
     )
     // compaction will happen here.
     sql("alter table normalcompaction compact 'major'"
@@ -151,9 +151,7 @@ class DataCompactionTest extends QueryTest with BeforeAndAfterAll {
   override def afterAll {
     /* sql("drop cube normalcompaction") */
     CarbonProperties.getInstance()
-      .addProperty(CarbonCommonConstants.CARBON_TIMESTAMP_FORMAT,
-        CarbonCommonConstants.CARBON_TIMESTAMP_DEFAULT_FORMAT
-      )
+      .addProperty(CarbonCommonConstants.CARBON_TIMESTAMP_FORMAT, "dd-MM-yyyy")
     CarbonProperties.getInstance().addProperty("carbon.enable.load.merge", "false")
   }
 

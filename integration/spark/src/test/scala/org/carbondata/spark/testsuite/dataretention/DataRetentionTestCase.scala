@@ -26,14 +26,13 @@ import org.apache.commons.lang3.time.DateUtils
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.common.util.CarbonHiveContext._
 import org.apache.spark.sql.common.util.QueryTest
-
-import org.carbondata.core.constants.CarbonCommonConstants
-import org.carbondata.core.util.CarbonProperties
 import org.scalatest.BeforeAndAfterAll
 
 import org.carbondata.core.carbon.path.CarbonStorePath
 import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier}
+import org.carbondata.core.constants.CarbonCommonConstants
 import org.carbondata.core.load.LoadMetadataDetails
+import org.carbondata.core.util.CarbonProperties
 import org.carbondata.lcm.status.SegmentStatusManager
 import org.carbondata.spark.exception.MalformedCarbonCommandException
 
@@ -58,9 +57,11 @@ class DataRetentionTestCase extends QueryTest with BeforeAndAfterAll {
   var defaultDateFormat = new SimpleDateFormat(CarbonCommonConstants
     .CARBON_TIMESTAMP_DEFAULT_FORMAT)
 
+
   override def beforeAll {
     CarbonProperties.getInstance.addProperty(CarbonCommonConstants.MAX_QUERY_EXECUTION_TIME, "1")
-
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.CARBON_TIMESTAMP_FORMAT, "yyyy/mm/dd")
     sql(
       "CREATE table DataRetentionTable (ID int, date String, country String, name " +
       "String," +
@@ -80,6 +81,8 @@ class DataRetentionTestCase extends QueryTest with BeforeAndAfterAll {
   override def afterAll {
     sql("drop table DataRetentionTable")
     sql("drop table carbon_TABLE_1")
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.CARBON_TIMESTAMP_FORMAT, "dd-MM-yyyy")
   }
 
 
@@ -96,7 +99,7 @@ class DataRetentionTestCase extends QueryTest with BeforeAndAfterAll {
 
   test("RetentionTest_withoutDelete") {
     checkAnswer(
-      sql("SELECT country, count(salary) AS amount FROM DataRetentionTable WHERE country" +
+      sql("SELECT country, count(salary) AS amount FROM dataretentionTable WHERE country" +
           " IN ('china','ind','aus','eng') GROUP BY country"
       ),
       Seq(Row("aus", 9), Row("ind", 9))
@@ -114,7 +117,7 @@ class DataRetentionTestCase extends QueryTest with BeforeAndAfterAll {
     val actualValue: String = getSegmentStartTime(segments, 1)
     // delete segments (0,1) which contains ind, aus
     sql(
-      "DELETE SEGMENTS FROM TABLE DataRetentionTable where STARTTIME before '" + actualValue + "'")
+      "DELETE SEGMENTS FROM TABLE dataretentionTable where STARTTIME before '" + actualValue + "'")
 
     // load segment 2 which contains eng
     sql(
@@ -130,9 +133,9 @@ class DataRetentionTestCase extends QueryTest with BeforeAndAfterAll {
 
   test("RetentionTest3_DeleteByLoadId") {
     // delete segment 2 and load ind segment
-    sql("DELETE LOAD 2 FROM TABLE DataRetentionTable")
+    sql("DELETE LOAD 2 FROM TABLE dataretentionTable")
     sql(
-      "LOAD DATA LOCAL INPATH '" + resource + "dataretention1.csv' INTO TABLE DataRetentionTable " +
+      "LOAD DATA LOCAL INPATH '" + resource + "dataretention1.csv' INTO TABLE dataretentionTable " +
       "OPTIONS('DELIMITER' = ',')")
     checkAnswer(
       sql("SELECT country, count(salary) AS amount FROM DataRetentionTable WHERE country" +
@@ -140,7 +143,10 @@ class DataRetentionTestCase extends QueryTest with BeforeAndAfterAll {
       ),
       Seq(Row("ind", 9))
     )
-    sql("clean files for table DataRetentionTable")
+
+    // these queries should execute without any error.
+    sql("show segments for table dataretentionTable")
+    sql("clean files for table dataretentionTable")
   }
 
   test("RetentionTest4_DeleteByInvalidLoadId") {
@@ -177,6 +183,43 @@ class DataRetentionTestCase extends QueryTest with BeforeAndAfterAll {
 
     checkAnswer(
       sql("select count(*) from caRbon_TabLe_1"), Seq(Row(0)))
+
+  }
+  test("RetentionTest_DeleteSegmentsByLoadTimeValiadtion") {
+
+    try {
+      sql(
+        "DELETE SEGMENTS FROM TABLE dataretentionTable where STARTTIME before" +
+        " 'abcd-01-01 00:00:00'")
+      assert(false)
+    } catch {
+      case e: MalformedCarbonCommandException =>
+        assert(e.getMessage.contains("Invalid load start time format"))
+      case _ => assert(false)
+    }
+
+    try {
+      sql(
+        "DELETE SEGMENTS FROM TABLE dataretentionTable where STARTTIME before" +
+        " '2099:01:01 00:00:00'")
+      assert(false)
+    } catch {
+      case e: MalformedCarbonCommandException =>
+        assert(e.getMessage.contains("Invalid load start time format"))
+      case _ => assert(false)
+    }
+
+    checkAnswer(
+      sql("SELECT country, count(salary) AS amount FROM DataRetentionTable WHERE country" +
+          " IN ('china','ind','aus','eng') GROUP BY country"
+      ),
+      Seq(Row("ind", 9))
+    )
+    sql("DELETE SEGMENTS FROM TABLE dataretentionTable where STARTTIME before '2099-01-01'")
+    checkAnswer(
+      sql("SELECT country, count(salary) AS amount FROM DataRetentionTable WHERE country" +
+          " IN ('china','ind','aus','eng') GROUP BY country"), Seq())
+
 
   }
 

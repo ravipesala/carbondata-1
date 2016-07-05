@@ -24,6 +24,7 @@ import java.util.SortedMap;
 import org.carbondata.core.carbon.AbsoluteTableIdentifier;
 import org.carbondata.core.carbon.datastore.block.SegmentProperties;
 import org.carbondata.core.carbon.metadata.encoder.Encoding;
+import org.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
 import org.carbondata.query.carbonfilterinterface.FilterExecuterType;
 import org.carbondata.query.expression.ColumnExpression;
@@ -80,7 +81,11 @@ public class ConditionalFilterResolverImpl implements FilterResolverIntf {
         // column expression.
         // we need to check if the other expression contains column
         // expression or not in depth.
-        if (FilterUtil.checkIfExpressionContainsColumn(rightExp)) {
+        CarbonDimension dimension = columnExpression.getDimension();
+        if (FilterUtil.checkIfExpressionContainsColumn(rightExp)
+            || FilterUtil.isExpressionNeedsToResolved(rightExp, isIncludeFilter) &&
+            dimension.hasEncoding(Encoding.DICTIONARY) && !dimension
+            .hasEncoding(Encoding.DIRECT_DICTIONARY)) {
           isExpressionResolve = true;
         } else {
           //Visitor pattern is been used in this scenario inorder to populate the
@@ -127,8 +132,7 @@ public class ConditionalFilterResolverImpl implements FilterResolverIntf {
       metadata.setColumnExpression(columnList.get(0));
       metadata.setExpression(exp);
       metadata.setIncludeFilter(isIncludeFilter);
-      if (!columnList.get(0).getDimension().hasEncoding(Encoding.DICTIONARY) || columnList.get(0)
-          .getDimension().hasEncoding(Encoding.DIRECT_DICTIONARY)) {
+      if (!columnList.get(0).getDimension().hasEncoding(Encoding.DICTIONARY)) {
         dimColResolvedFilterInfo.populateFilterInfoBasedOnColumnType(
             FilterInfoTypeVisitorFactory.getResolvedFilterInfoVisitor(columnList.get(0)), metadata);
 
@@ -194,20 +198,16 @@ public class ConditionalFilterResolverImpl implements FilterResolverIntf {
    * method will get the start key based on the filter surrogates
    *
    * @return end IndexKey
+   * @throws QueryExecutionException
    */
   @Override public void getEndKey(SegmentProperties segmentProperties,
       AbsoluteTableIdentifier absoluteTableIdentifier, long[] endKeys,
-      SortedMap<Integer, byte[]> setOfEndKeyByteArray) {
+      SortedMap<Integer, byte[]> setOfEndKeyByteArray) throws QueryExecutionException {
     if (null == dimColResolvedFilterInfo.getEndIndexKey()) {
-      try {
-        FilterUtil.getEndKey(dimColResolvedFilterInfo.getDimensionResolvedFilterInstance(),
-            absoluteTableIdentifier, endKeys, segmentProperties);
-        FilterUtil.getEndKeyForNoDictionaryDimension(dimColResolvedFilterInfo, segmentProperties,
-            setOfEndKeyByteArray);
-      } catch (QueryExecutionException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
-      }
+      FilterUtil.getEndKey(dimColResolvedFilterInfo.getDimensionResolvedFilterInstance(),
+          absoluteTableIdentifier, endKeys, segmentProperties);
+      FilterUtil.getEndKeyForNoDictionaryDimension(dimColResolvedFilterInfo, segmentProperties,
+          setOfEndKeyByteArray);
     }
   }
 

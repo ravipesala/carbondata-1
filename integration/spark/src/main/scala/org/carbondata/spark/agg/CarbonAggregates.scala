@@ -111,7 +111,10 @@ case class AverageCarbon(child: Expression, castedDataType: DataType = null)
     val partialSum = Alias(AverageCarbon(child), "PartialAverage")()
     SplitEvaluation(
       AverageCarbonFinal(partialSum.toAttribute,
-        if (child.dataType == IntegerType) DoubleType else child.dataType),
+        child.dataType match {
+          case IntegerType | StringType | LongType | TimestampType => DoubleType
+          case _ => child.dataType
+        }),
       partialSum :: Nil)
   }
 
@@ -334,6 +337,10 @@ case class AverageFunctionCarbon(expr: Expression, base: AggregateExpression1, f
               dc = new AvgLongAggregator
               dc.agg(s.toString.toLong)
               dc.setNewValue(s.toString.toLong)
+            case t: java.sql.Timestamp =>
+              dc = new AvgTimestampAggregator
+              dc.agg(s.toString.toDouble)
+              dc.setNewValue(s.toString.toDouble)
             case _ =>
               dc = new AvgDoubleAggregator
               dc.agg(s.toString.toDouble)
@@ -362,6 +369,8 @@ case class AverageFunctionCarbon(expr: Expression, base: AggregateExpression1, f
             Cast(Literal(avg.getBigDecimalValue), base.dataType).eval(null)
           case avg: AvgLongAggregator =>
             Cast(Literal(avg.getLongValue), base.dataType).eval(null)
+          case avg: AvgTimestampAggregator =>
+            Cast(Literal(avg.getDoubleValue), base.dataType).eval(null)
           case _ =>
             Cast(Literal(avg.getDoubleValue), base.dataType).eval(null)
         }
@@ -445,6 +454,10 @@ case class SumFunctionCarbon(expr: Expression, base: AggregateExpression1, final
               dc = new SumLongAggregator
               dc.agg(s.toString.toLong)
               dc.setNewValue(s.toString.toLong)
+            case t: java.sql.Timestamp =>
+              dc = new SumTimestampAggregator
+              dc.agg(s.toString.toDouble)
+              dc.setNewValue(s.toString.toDouble)
             case _ =>
               dc = new SumDoubleAggregator
               dc.agg(s.toString.toDouble)
@@ -500,10 +513,25 @@ case class MaxFunctionCarbon(expr: Expression, base: AggregateExpression1, final
     val agg = resolution match {
       case s: MeasureAggregator => s
       case s =>
-        val dc = new MaxAggregator
+        var dc: MeasureAggregator = null
         if (s != null) {
-          dc.agg(s.toString.toDouble)
-          dc.setNewValue(s.toString.toDouble)
+          s match {
+            case bd: java.math.BigDecimal =>
+              dc = new MaxBigDecimalAggregator
+              dc.agg(new java.math.BigDecimal(s.toString))
+              dc.setNewValue(new java.math.BigDecimal(s.toString))
+            case l: Long =>
+              dc = new MaxLongAggregator
+              dc.agg(s.toString.toLong)
+              dc.setNewValue(s.toString.toLong)
+            case _ =>
+              dc = new MaxAggregator
+              dc.agg(s.toString.toDouble)
+              dc.setNewValue(s.toString.toDouble)
+          }
+        }
+        else {
+          dc = new MaxAggregator
         }
         dc
     }
@@ -519,7 +547,14 @@ case class MaxFunctionCarbon(expr: Expression, base: AggregateExpression1, final
       if (max.isFirstTime) {
         null
       } else {
-        Cast(Literal(max.getValueObject), base.dataType).eval(null)
+        max match {
+          case s: MaxBigDecimalAggregator =>
+            Cast(Literal(max.getBigDecimalValue), base.dataType).eval(null)
+          case s: MaxLongAggregator =>
+            Cast(Literal(max.getLongValue), base.dataType).eval(null)
+          case _ =>
+            Cast(Literal(max.getValueObject), base.dataType).eval(null)
+        }
       }
     } else {
       max
@@ -544,13 +579,29 @@ case class MinFunctionCarbon(expr: Expression, base: AggregateExpression1, final
     val agg = resolution match {
       case s: MeasureAggregator => s
       case s =>
-        val dc: MeasureAggregator = new MinAggregator
+        var dc: MeasureAggregator = null
         if (s != null) {
-          dc.agg(s.toString.toDouble)
-          dc.setNewValue(s.toString.toDouble)
+          s match {
+            case bd: java.math.BigDecimal =>
+              dc = new MinBigDecimalAggregator
+              dc.agg(new java.math.BigDecimal(s.toString))
+              dc.setNewValue(new java.math.BigDecimal(s.toString))
+            case l: Long =>
+              dc = new MinLongAggregator
+              dc.agg(s.toString.toLong)
+              dc.setNewValue(s.toString.toLong)
+            case _ =>
+              dc = new MinAggregator
+              dc.agg(s.toString.toDouble)
+              dc.setNewValue(s.toString.toDouble)
+          }
+        }
+        else {
+          dc = new MinAggregator
         }
         dc
     }
+
     if (min == null) {
       min = agg
     } else {
@@ -563,7 +614,14 @@ case class MinFunctionCarbon(expr: Expression, base: AggregateExpression1, final
       if (min.isFirstTime) {
         null
       } else {
-        Cast(Literal(min.getValueObject), base.dataType).eval(null)
+        min match {
+          case s: MinBigDecimalAggregator =>
+            Cast(Literal(min.getBigDecimalValue), base.dataType).eval(null)
+          case s: MinLongAggregator =>
+            Cast(Literal(min.getLongValue), base.dataType).eval(null)
+          case _ =>
+            Cast(Literal(min.getValueObject), base.dataType).eval(null)
+        }
       }
     } else {
       min

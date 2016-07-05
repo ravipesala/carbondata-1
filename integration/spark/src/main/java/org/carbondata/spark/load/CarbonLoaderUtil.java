@@ -29,8 +29,10 @@ import org.carbondata.core.cache.CacheProvider;
 import org.carbondata.core.cache.CacheType;
 import org.carbondata.core.cache.dictionary.Dictionary;
 import org.carbondata.core.cache.dictionary.DictionaryColumnUniqueIdentifier;
+import org.carbondata.core.carbon.AbsoluteTableIdentifier;
 import org.carbondata.core.carbon.CarbonDataLoadSchema;
 import org.carbondata.core.carbon.CarbonTableIdentifier;
+import org.carbondata.core.carbon.ColumnIdentifier;
 import org.carbondata.core.carbon.datastore.block.TableBlockInfo;
 import org.carbondata.core.carbon.metadata.CarbonMetadata;
 import org.carbondata.core.carbon.metadata.datatype.DataType;
@@ -48,9 +50,11 @@ import org.carbondata.core.datastorage.store.filesystem.CarbonFileFilter;
 import org.carbondata.core.datastorage.store.impl.FileFactory;
 import org.carbondata.core.datastorage.store.impl.FileFactory.FileType;
 import org.carbondata.core.load.LoadMetadataDetails;
+import org.carbondata.core.locks.ICarbonLock;
 import org.carbondata.core.util.CarbonProperties;
 import org.carbondata.core.util.CarbonUtil;
 import org.carbondata.core.util.CarbonUtilException;
+import org.carbondata.lcm.status.SegmentStatusManager;
 import org.carbondata.processing.api.dataloader.DataLoadModel;
 import org.carbondata.processing.api.dataloader.SchemaInfo;
 import org.carbondata.processing.csvload.DataGraphExecuter;
@@ -67,6 +71,8 @@ import com.google.gson.Gson;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.spark.SparkConf;
+import org.apache.spark.util.Utils;
 
 public final class CarbonLoaderUtil {
 
@@ -85,7 +91,8 @@ public final class CarbonLoaderUtil {
   }
 
   private static void generateGraph(IDataProcessStatus schmaModel, SchemaInfo info,
-      int currentRestructNumber, CarbonLoadModel loadModel) throws GraphGeneratorException {
+      int currentRestructNumber, CarbonLoadModel loadModel, String outputLocation)
+      throws GraphGeneratorException {
     DataLoadModel model = new DataLoadModel();
     model.setCsvLoad(null != schmaModel.getCsvFilePath() || null != schmaModel.getFilesToProcess());
     model.setSchemaInfo(info);
@@ -98,6 +105,7 @@ public final class CarbonLoaderUtil {
           .getModificationOrDeletionTimesFromLoadMetadataDetails(loadMetadataDetails));
     }
     model.setBlocksID(schmaModel.getBlocksID());
+    model.setEscapeCharacter(schmaModel.getEscapeCharacter());
     model.setTaskNo(loadModel.getTaskNo());
     model.setFactTimeStamp(loadModel.getFactTimeStamp());
     boolean hdfsReadMode =
@@ -105,7 +113,7 @@ public final class CarbonLoaderUtil {
     int allocate = null != schmaModel.getCsvFilePath() ? 1 : schmaModel.getFilesToProcess().size();
     GraphGenerator generator = new GraphGenerator(model, hdfsReadMode, loadModel.getPartitionId(),
         loadModel.getStorePath(), currentRestructNumber, allocate,
-        loadModel.getCarbonDataLoadSchema(), loadModel.getSegmentId());
+        loadModel.getCarbonDataLoadSchema(), loadModel.getSegmentId(), outputLocation);
     generator.generateGraph();
   }
 
@@ -119,11 +127,12 @@ public final class CarbonLoaderUtil {
     String outPutLoc = storeLocation + "/etl";
     String databaseName = loadModel.getDatabaseName();
     String tableName = loadModel.getTableName();
-    String tempLocationKey = databaseName + '_' + tableName;
+    String tempLocationKey = databaseName + CarbonCommonConstants.UNDERSCORE + tableName
+        + CarbonCommonConstants.UNDERSCORE + loadModel.getTaskNo();
     CarbonProperties.getInstance().addProperty(tempLocationKey, storeLocation);
     CarbonProperties.getInstance()
         .addProperty(CarbonCommonConstants.STORE_LOCATION_HDFS, hdfsStoreLocation);
-    CarbonProperties.getInstance().addProperty("store_output_location", outPutLoc);
+    // CarbonProperties.getInstance().addProperty("store_output_location", outPutLoc);
     CarbonProperties.getInstance().addProperty("send.signal.load", "false");
 
     String fileNamePrefix = "";
@@ -152,6 +161,7 @@ public final class CarbonLoaderUtil {
     }
 
     schmaModel.setBlocksID(loadModel.getBlocksID());
+    schmaModel.setEscapeCharacter(loadModel.getEscapeChar());
     SchemaInfo info = new SchemaInfo();
 
     info.setSchemaName(databaseName);
@@ -160,7 +170,7 @@ public final class CarbonLoaderUtil {
     info.setComplexDelimiterLevel1(loadModel.getComplexDelimiterLevel1());
     info.setComplexDelimiterLevel2(loadModel.getComplexDelimiterLevel2());
 
-    generateGraph(schmaModel, info, currentRestructNumber, loadModel);
+    generateGraph(schmaModel, info, currentRestructNumber, loadModel, outPutLoc);
 
     DataGraphExecuter graphExecuter = new DataGraphExecuter(schmaModel);
     graphExecuter
@@ -251,6 +261,17 @@ public final class CarbonLoaderUtil {
     }
   }
 
+  public static void deleteSegment(CarbonLoadModel loadModel, int currentLoad) {
+    CarbonTable carbonTable = loadModel.getCarbonDataLoadSchema().getCarbonTable();
+    CarbonTablePath carbonTablePath = CarbonStorePath.getCarbonTablePath(loadModel.getStorePath(),
+        carbonTable.getCarbonTableIdentifier());
+
+    for (int i = 0; i < carbonTable.getPartitionCount(); i++) {
+      String segmentPath = carbonTablePath.getCarbonDataDirectoryPath(i+"",currentLoad+"");
+      deleteStorePath(segmentPath);
+    }
+  }
+
   public static void deleteSlice(int partitionCount, String schemaName, String cubeName,
       String tableName, String hdfsStoreLocation, int currentRestructNumber, String loadFolder) {
     String tableLoc = null;
@@ -267,43 +288,47 @@ public final class CarbonLoaderUtil {
     }
   }
 
-  public static void deletePartialLoadDataIfExist(int partitionCount, String schemaName,
-      String cubeName, String tableName, String hdfsStoreLocation, int currentRestructNumber,
-      int loadFolder) throws IOException {
-    String tableLoc = null;
-    String partitionSchemaName = null;
-    String partitionCubeName = null;
-    for (int i = 0; i < partitionCount; i++) {
-      partitionSchemaName = schemaName + '_' + i;
-      partitionCubeName = cubeName + '_' + i;
-      tableLoc =
-          getTableLocation(partitionSchemaName, partitionCubeName, tableName, hdfsStoreLocation,
-              currentRestructNumber);
+  public static void deletePartialLoadDataIfExist(CarbonLoadModel loadModel,
+      final boolean isCompactionFlow) throws IOException {
+    CarbonTable carbonTable = loadModel.getCarbonDataLoadSchema().getCarbonTable();
+    String metaDataLocation = carbonTable.getMetaDataFilepath();
+    SegmentStatusManager segmentStatusManager =
+        new SegmentStatusManager(carbonTable.getAbsoluteTableIdentifier());
+    LoadMetadataDetails[] details = segmentStatusManager.readLoadMetadata(metaDataLocation);
+    CarbonTablePath carbonTablePath = CarbonStorePath
+        .getCarbonTablePath(loadModel.getStorePath(), carbonTable.getCarbonTableIdentifier());
+    final List<String> loadFolders = new ArrayList<String>();
+    for (LoadMetadataDetails loadMetadata : details) {
+      loadFolders.add(carbonTablePath
+          .getCarbonDataDirectoryPath(loadMetadata.getPartitionCount(), loadMetadata.getLoadName())
+          .replace("\\", "/"));
+    }
 
-      final List<String> loadFolders = new ArrayList<String>();
-      for (int j = 0; j < loadFolder; j++) {
-        loadFolders.add(
-            (tableLoc + File.separator + CarbonCommonConstants.LOAD_FOLDER + j).replace("\\", "/"));
-      }
-      if (loadFolder != 0) {
-        loadFolders.add(
-            (tableLoc + File.separator + CarbonCommonConstants.SLICE_METADATA_FILENAME + "."
-                + currentRestructNumber).replace("\\", "/"));
-      }
-      FileType fileType = FileFactory.getFileType(tableLoc);
-      if (FileFactory.isFileExist(tableLoc, fileType)) {
-        CarbonFile carbonFile = FileFactory.getCarbonFile(tableLoc, fileType);
+    //delete folder which metadata no exist in tablestatus
+    for (int i = 0; i < carbonTable.getPartitionCount(); i++) {
+      String partitionPath = carbonTablePath.getPartitionDir(i + "");
+      FileType fileType = FileFactory.getFileType(partitionPath);
+      if (FileFactory.isFileExist(partitionPath, fileType)) {
+        CarbonFile carbonFile = FileFactory.getCarbonFile(partitionPath, fileType);
         CarbonFile[] listFiles = carbonFile.listFiles(new CarbonFileFilter() {
           @Override public boolean accept(CarbonFile path) {
-            return !loadFolders.contains(path.getAbsolutePath().replace("\\", "/")) && !path
-                .getName().contains(CarbonCommonConstants.MERGERD_EXTENSION);
+            return !loadFolders.contains(path.getAbsolutePath().replace("\\", "/"));
           }
         });
         for (int k = 0; k < listFiles.length; k++) {
-          deleteStorePath(listFiles[k].getAbsolutePath());
+          String segmentId =
+              CarbonTablePath.DataPathUtil.getSegmentId(listFiles[k].getAbsolutePath() + "/dummy");
+          if (isCompactionFlow) {
+            if (segmentId.contains(".")) {
+              deleteStorePath(listFiles[k].getAbsolutePath());
+            }
+          } else {
+            if (!segmentId.contains(".")) {
+              deleteStorePath(listFiles[k].getAbsolutePath());
+            }
+          }
         }
       }
-
     }
   }
 
@@ -408,7 +433,8 @@ public final class CarbonLoaderUtil {
     CarbonTableIdentifier carbonTableIdentifier =
         loadModel.getCarbonDataLoadSchema().getCarbonTable().getCarbonTableIdentifier();
     String segmentId = segmentName.substring(CarbonCommonConstants.LOAD_FOLDER.length());
-    String tempLocationKey = databaseName + '_' + tableName;
+    String tempLocationKey = databaseName + CarbonCommonConstants.UNDERSCORE + tableName
+        + CarbonCommonConstants.UNDERSCORE + loadModel.getTaskNo();
     // form local store location
     String localStoreLocation = getStoreLocation(CarbonProperties.getInstance()
             .getProperty(tempLocationKey, CarbonCommonConstants.STORE_LOCATION_DEFAULT_VAL),
@@ -681,52 +707,82 @@ public final class CarbonLoaderUtil {
   /**
    * This API will write the load level metadata for the loadmanagement module inorder to
    * manage the load and query execution management smoothly.
+   *
+   * @param loadCount
+   * @param loadMetadataDetails
+   * @param loadModel
+   * @param loadStatus
+   * @param startLoadTime
+   * @return boolean which determines whether status update is done or not.
+   * @throws IOException
    */
-  public static void recordLoadMetadata(int loadCount, LoadMetadataDetails loadMetadataDetails,
+  public static boolean recordLoadMetadata(int loadCount, LoadMetadataDetails loadMetadataDetails,
       CarbonLoadModel loadModel, String loadStatus, String startLoadTime) throws IOException {
 
-    String dataLoadLocation = null;
-    //String dataLoadLocation = getLoadFolderPath(loadModel);
-    dataLoadLocation =
-        loadModel.getCarbonDataLoadSchema().getCarbonTable().getMetaDataFilepath() + File.separator
-            + CarbonCommonConstants.LOADMETADATA_FILENAME;
-    Gson gsonObjectToRead = new Gson();
-    List<LoadMetadataDetails> listOfLoadFolderDetails = null;
-    DataInputStream dataInputStream = null;
-    String loadEnddate = readCurrentTime();
-    loadMetadataDetails.setTimestamp(loadEnddate);
-    loadMetadataDetails.setLoadStatus(loadStatus);
-    loadMetadataDetails.setLoadName(String.valueOf(loadCount));
-    loadMetadataDetails.setLoadStartTime(startLoadTime);
-    LoadMetadataDetails[] listOfLoadFolderDetailsArray = null;
+    boolean status = false;
+
+    String metaDataFilepath =
+        loadModel.getCarbonDataLoadSchema().getCarbonTable().getMetaDataFilepath();
+
+    AbsoluteTableIdentifier absoluteTableIdentifier =
+        loadModel.getCarbonDataLoadSchema().getCarbonTable().getAbsoluteTableIdentifier();
+
+    CarbonTablePath carbonTablePath = CarbonStorePath
+        .getCarbonTablePath(absoluteTableIdentifier.getStorePath(),
+            absoluteTableIdentifier.getCarbonTableIdentifier());
+
+    String tableStatusPath = carbonTablePath.getTableStatusFilePath();
+
+    SegmentStatusManager segmentStatusManager = new SegmentStatusManager(
+        absoluteTableIdentifier);
+
+    ICarbonLock carbonLock = segmentStatusManager.getTableStatusLock();
+
     try {
-      if (FileFactory.isFileExist(dataLoadLocation, FileFactory.getFileType(dataLoadLocation))) {
+      if (carbonLock.lockWithRetries()) {
+        LOGGER.info(
+            "Acquired lock for table" + loadModel.getDatabaseName() + "." + loadModel.getTableName()
+                + " for table status updation");
 
-        dataInputStream = FileFactory
-            .getDataInputStream(dataLoadLocation, FileFactory.getFileType(dataLoadLocation));
+        LoadMetadataDetails[] listOfLoadFolderDetailsArray =
+            segmentStatusManager.readLoadMetadata(metaDataFilepath);
 
-        BufferedReader buffReader = new BufferedReader(new InputStreamReader(dataInputStream,
-            CarbonCommonConstants.CARBON_DEFAULT_STREAM_ENCODEFORMAT));
-        listOfLoadFolderDetailsArray =
-            gsonObjectToRead.fromJson(buffReader, LoadMetadataDetails[].class);
-      }
-      listOfLoadFolderDetails =
-          new ArrayList<LoadMetadataDetails>(CarbonCommonConstants.DEFAULT_COLLECTION_SIZE);
+        String loadEnddate = readCurrentTime();
+        loadMetadataDetails.setTimestamp(loadEnddate);
+        loadMetadataDetails.setLoadStatus(loadStatus);
+        loadMetadataDetails.setLoadName(String.valueOf(loadCount));
+        loadMetadataDetails.setLoadStartTime(startLoadTime);
 
-      if (null != listOfLoadFolderDetailsArray) {
-        for (LoadMetadataDetails loadMetadata : listOfLoadFolderDetailsArray) {
-          listOfLoadFolderDetails.add(loadMetadata);
+        List<LoadMetadataDetails> listOfLoadFolderDetails =
+            new ArrayList<>(CarbonCommonConstants.DEFAULT_COLLECTION_SIZE);
+
+        if (null != listOfLoadFolderDetailsArray) {
+          for (LoadMetadataDetails loadMetadata : listOfLoadFolderDetailsArray) {
+            listOfLoadFolderDetails.add(loadMetadata);
+          }
         }
+        listOfLoadFolderDetails.add(loadMetadataDetails);
+
+        segmentStatusManager.writeLoadDetailsIntoFile(tableStatusPath, listOfLoadFolderDetails
+            .toArray(new LoadMetadataDetails[listOfLoadFolderDetails.size()]));
+
+        status = true;
+      } else {
+        LOGGER.error("Not able to acquire the lock for Table status updation for table " + loadModel
+            .getDatabaseName() + "." + loadModel.getTableName());
       }
-      listOfLoadFolderDetails.add(loadMetadataDetails);
-
     } finally {
-
-      CarbonUtil.closeStreams(dataInputStream);
+      if (carbonLock.unlock()) {
+        LOGGER.info(
+            "Table unlocked successfully after table status updation" + loadModel.getDatabaseName()
+                + "." + loadModel.getTableName());
+      } else {
+        LOGGER.error(
+            "Unable to unlock Table lock for table" + loadModel.getDatabaseName() + "." + loadModel
+                .getTableName() + " during table status updation");
+      }
     }
-    writeLoadMetadata(loadModel.getCarbonDataLoadSchema(), loadModel.getDatabaseName(),
-        loadModel.getTableName(), listOfLoadFolderDetails);
-
+    return status;
   }
 
   public static void writeLoadMetadata(CarbonDataLoadSchema schema,
@@ -924,7 +980,7 @@ public final class CarbonLoaderUtil {
   }
 
   public static Dictionary getDictionary(CarbonTableIdentifier tableIdentifier,
-      String columnIdentifier, String carbonStorePath, DataType dataType)
+      ColumnIdentifier columnIdentifier, String carbonStorePath, DataType dataType)
       throws CarbonUtilException {
     return getDictionary(
         new DictionaryColumnUniqueIdentifier(tableIdentifier, columnIdentifier, dataType),
@@ -1233,4 +1289,13 @@ public final class CarbonLoaderUtil {
     }
   }
 
+  /**
+   * return the Array of available local-dirs
+   *
+   * @param conf
+   * @return
+   */
+  public static String[] getConfiguredLocalDirs(SparkConf conf) {
+    return Utils.getConfiguredLocalDirs(conf);
+  }
 }

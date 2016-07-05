@@ -46,6 +46,7 @@ import org.carbondata.core.constants.CarbonCommonConstants
 import org.carbondata.core.datastorage.store.filesystem.CarbonFile
 import org.carbondata.core.datastorage.store.impl.FileFactory
 import org.carbondata.core.datastorage.store.impl.FileFactory.FileType
+import org.carbondata.core.locks.ZookeeperInit
 import org.carbondata.core.reader.ThriftReader
 import org.carbondata.core.util.{CarbonProperties, CarbonUtil}
 import org.carbondata.core.writer.ThriftWriter
@@ -111,15 +112,6 @@ class CarbonMetastoreCatalog(hive: HiveContext, val storePath: String, client: C
 
   val metadata = loadMetadata(storePath)
 
-  lazy val useUniquePath = if ("true".equalsIgnoreCase(CarbonProperties.getInstance().
-    getProperty(
-      CarbonCommonConstants.CARBON_UNIFIED_STORE_PATH,
-      CarbonCommonConstants.CARBON_UNIFIED_STORE_PATH_DEFAULT))) {
-    true
-  } else {
-    false
-  }
-
   def lookupRelation1(
       databaseName: Option[String],
       tableName: String,
@@ -166,7 +158,7 @@ class CarbonMetastoreCatalog(hive: HiveContext, val storePath: String, client: C
           CarbonRelation(schemaName, cubeName,
             CarbonSparkUtil.createSparkMeta(cubes.head.carbonTable), cubes.head, alias)(sqlContext)
         } else {
-          LOGGER.audit(s"Table Not Found: $schemaName $cubeName")
+          LOGGER.audit(s"Table Not Found: $schemaName.$cubeName")
           throw new NoSuchTableException
         }
       case Seq(cubeName) =>
@@ -178,7 +170,7 @@ class CarbonMetastoreCatalog(hive: HiveContext, val storePath: String, client: C
           CarbonRelation(currentDatabase, cubeName,
             CarbonSparkUtil.createSparkMeta(cubes.head.carbonTable), cubes.head, alias)(sqlContext)
         } else {
-          LOGGER.audit(s"Table Not Found: $cubeName")
+          LOGGER.audit(s"Table Not Found: $currentDatabase.$cubeName")
           throw new NoSuchTableException
         }
       case _ =>
@@ -214,39 +206,23 @@ class CarbonMetastoreCatalog(hive: HiveContext, val storePath: String, client: C
   }
 
   def loadMetadata(metadataPath: String): MetaData = {
+
+    // creating zookeeper instance once.
+    // if zookeeper is configured as carbon lock type.
+    if (CarbonProperties.getInstance()
+      .getProperty(CarbonCommonConstants.LOCK_TYPE, CarbonCommonConstants.LOCK_TYPE_DEFAULT)
+      .equalsIgnoreCase(CarbonCommonConstants.CARBON_LOCK_TYPE_ZOOKEEPER)) {
+      val zookeeperUrl = hive.getConf("spark.deploy.zookeeper.url", "127.0.0.1:2181")
+      ZookeeperInit.getInstance(zookeeperUrl)
+    }
+
     if (metadataPath == null) {
       return null
     }
     val fileType = FileFactory.getFileType(metadataPath)
     val metaDataBuffer = new ArrayBuffer[TableMeta]
-    if (useUniquePath) {
-      if (FileFactory.isFileExist(metadataPath, fileType)) {
-        val file = FileFactory.getCarbonFile(metadataPath, fileType)
-        val schemaFolders = file.listFiles()
-
-        schemaFolders.foreach(schemaFolder => {
-          if (schemaFolder.isDirectory) {
-            val cubeFolders = schemaFolder.listFiles()
-
-            cubeFolders.foreach(cubeFolder => {
-              val schemaPath = metadataPath + "/" + schemaFolder.getName + "/" + cubeFolder.getName
-              try {
-                fillMetaData(schemaPath, fileType, metaDataBuffer)
-                updateSchemasUpdatedTime(schemaFolder.getName, cubeFolder.getName)
-              } catch {
-                case ex: org.apache.hadoop.security.AccessControlException =>
-                // Ingnore Access control exception and get only accessible cube details
-              }
-            })
-          }
-        })
-      }
-
-    } else {
-
-      fillMetaData(metadataPath, fileType, metaDataBuffer)
-      updateSchemasUpdatedTime("", "")
-    }
+    fillMetaData(metadataPath, fileType, metaDataBuffer)
+    updateSchemasUpdatedTime("", "")
     MetaData(metaDataBuffer)
 
   }
@@ -379,7 +355,7 @@ class CarbonMetastoreCatalog(hive: HiveContext, val storePath: String, client: C
     logInfo(s"Table $tableName for Database $dbName created successfully.")
     LOGGER.info("Table " + tableName + " for Database " + dbName + " created successfully.")
     updateSchemasUpdatedTime(dbName, tableName)
-    schemaMetadataPath
+    carbonTablePath.getPath
   }
 
   private def updateMetadataByWrapperTable(
@@ -594,13 +570,7 @@ class CarbonMetastoreCatalog(hive: HiveContext, val storePath: String, client: C
 
   private def getTimestampFileAndType(schemaName: String, cubeName: String) = {
 
-    val timestampFile = if (useUniquePath) {
-      storePath + "/" + schemaName + "/" + cubeName + "/" +
-      CarbonCommonConstants.SCHEMAS_MODIFIED_TIME_FILE
-    }
-    else {
-      storePath + "/" + CarbonCommonConstants.SCHEMAS_MODIFIED_TIME_FILE
-    }
+    val timestampFile = storePath + "/" + CarbonCommonConstants.SCHEMAS_MODIFIED_TIME_FILE
 
     val timestampFileType = FileFactory.getFileType(timestampFile)
     (timestampFile, timestampFileType)
@@ -610,20 +580,14 @@ class CarbonMetastoreCatalog(hive: HiveContext, val storePath: String, client: C
     val (timestampFile, timestampFileType) = getTimestampFileAndType(schemaName, cubeName)
 
     if (!FileFactory.isFileExist(timestampFile, timestampFileType)) {
-      LOGGER.audit("Creating timestamp file")
+      LOGGER.audit(s"Creating timestamp file for $schemaName.$cubeName")
       FileFactory.createNewFile(timestampFile, timestampFileType)
     }
 
     touchSchemasTimestampFile(schemaName, cubeName)
 
-    if (useUniquePath) {
-      cubeModifiedTimeStore.put(schemaName + '_' + cubeName,
-        FileFactory.getCarbonFile(timestampFile, timestampFileType).getLastModifiedTime)
-    }
-    else {
-      cubeModifiedTimeStore.put("default",
-        FileFactory.getCarbonFile(timestampFile, timestampFileType).getLastModifiedTime)
-    }
+    cubeModifiedTimeStore.put("default",
+      FileFactory.getCarbonFile(timestampFile, timestampFileType).getLastModifiedTime)
 
   }
 
@@ -634,26 +598,11 @@ class CarbonMetastoreCatalog(hive: HiveContext, val storePath: String, client: C
   }
 
   def checkSchemasModifiedTimeAndReloadCubes() {
-    if (useUniquePath) {
-      metadata.cubesMeta.foreach(c => {
-        val (timestampFile, timestampFileType) = getTimestampFileAndType(
-          c.carbonTableIdentifier.getDatabaseName, c.carbonTableIdentifier.getTableName)
-
-        if (FileFactory.isFileExist(timestampFile, timestampFileType)) {
-          if (!(FileFactory.getCarbonFile(timestampFile, timestampFileType).getLastModifiedTime ==
-                cubeModifiedTimeStore.get(c.carbonTableIdentifier.getDatabaseName + "_" +
-                                          c.carbonTableIdentifier.getTableName))) {
-            refreshCache()
-          }
-        }
-      })
-    } else {
-      val (timestampFile, timestampFileType) = getTimestampFileAndType("", "")
-      if (FileFactory.isFileExist(timestampFile, timestampFileType)) {
-        if (!(FileFactory.getCarbonFile(timestampFile, timestampFileType).
-          getLastModifiedTime == cubeModifiedTimeStore.get("default"))) {
-          refreshCache()
-        }
+    val (timestampFile, timestampFileType) = getTimestampFileAndType("", "")
+    if (FileFactory.isFileExist(timestampFile, timestampFileType)) {
+      if (!(FileFactory.getCarbonFile(timestampFile, timestampFileType).
+        getLastModifiedTime == cubeModifiedTimeStore.get("default"))) {
+        refreshCache()
       }
     }
   }

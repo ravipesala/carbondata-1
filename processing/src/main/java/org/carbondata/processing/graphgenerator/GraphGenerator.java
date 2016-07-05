@@ -116,8 +116,7 @@ public class GraphGenerator {
   /**
    * OUTPUT_LOCATION
    */
-  private final String outputLocation = CarbonProperties.getInstance()
-      .getProperty("store_output_location", "../unibi-solutions/system/carbon/etl");
+  private String outputLocation = "";
   /**
    * xAxixLocation
    */
@@ -179,6 +178,7 @@ public class GraphGenerator {
   private String factStoreLocation;
   private int currentRestructNumber;
   private String blocksID;
+  private String escapeCharacter;
   /**
    * task id, each spark task has a unique id
    */
@@ -212,8 +212,17 @@ public class GraphGenerator {
     this.taskNo = dataLoadModel.getTaskNo();
     this.factTimeStamp = dataLoadModel.getFactTimeStamp();
     this.segmentId = segmentId;
+    this.escapeCharacter = dataLoadModel.getEscapeCharacter();
     initialise();
     LOGGER.info("************* Is Columnar Storage" + isColumnar);
+  }
+
+  public GraphGenerator(DataLoadModel dataLoadModel, boolean isHDFSReadMode, String partitionID,
+      String factStoreLocation, int currentRestructNum, int allocate,
+      CarbonDataLoadSchema carbonDataLoadSchema, String segmentId, String outputLocation) {
+    this(dataLoadModel, isHDFSReadMode, partitionID, factStoreLocation, currentRestructNum,
+        allocate, carbonDataLoadSchema, segmentId);
+    this.outputLocation = outputLocation;
   }
 
   /**
@@ -431,6 +440,7 @@ public class GraphGenerator {
         CarbonCommonConstants.CSV_READ_BUFFER_SIZE_DEFAULT));
     //set blocks info id
     csvInputMeta.setBlocksID(this.blocksID);
+    csvInputMeta.setEscapeCharacter(this.escapeCharacter);
     csvDataStep.setDraw(true);
     csvDataStep.setDescription("Read raw data from " + GraphGeneratorConstants.CSV_INPUT);
 
@@ -528,8 +538,10 @@ public class GraphGenerator {
     seqMeta.setTaskNo(taskNo);
     seqMeta.setCarbondim(graphConfiguration.getDimensionString());
     seqMeta.setComplexTypeString(graphConfiguration.getComplexTypeString());
+    seqMeta.setColumnPropertiesString(graphConfiguration.getColumnPropertiesString());
     seqMeta.setBatchSize(Integer.parseInt(graphConfiguration.getBatchSize()));
     seqMeta.setNoDictionaryDims(graphConfiguration.getNoDictionaryDims());
+    seqMeta.setDimensionColumnsDataType(graphConfiguration.getDimensionColumnsDataType());
     seqMeta.setCubeName(schemaInfo.getCubeName());
     seqMeta.setSchemaName(schemaInfo.getSchemaName());
     seqMeta.setComplexDelimiterLevel1(schemaInfo.getComplexDelimiterLevel1());
@@ -776,6 +788,8 @@ public class GraphGenerator {
         .setDimensions(CarbonSchemaParser.getCubeDimensions(dimensions, carbonDataLoadSchema));
     graphConfiguration
         .setActualDims(CarbonSchemaParser.getCubeDimensions(dimensions, carbonDataLoadSchema));
+    graphConfiguration
+        .setColumnPropertiesString(CarbonSchemaParser.getColumnPropertiesString(dimensions));
     graphConfiguration.setComplexTypeString(CarbonSchemaParser.getComplexTypeString(dimensions));
     prepareNoDictionaryMapping(dimensions, graphConfiguration);
     graphConfiguration
@@ -842,10 +856,10 @@ public class GraphGenerator {
     graphConfiguration.setMeasureNamesString(CarbonSchemaParser.getMeasuresNamesString(measures));
     graphConfiguration
         .setActualDimensionColumns(CarbonSchemaParser.getActualDimensions(dimensions));
-    //TODO: It will always be empty
+    graphConfiguration
+    .setDimensionColumnsDataType(CarbonSchemaParser.getDimensionsDataTypes(dimensions));
     //graphConfiguration.setNormHiers(CarbonSchemaParser.getNormHiers(cube, schema));
     graphConfiguration.setMeasureDataTypeInfo(CarbonSchemaParser.getMeasuresDataType(measures));
-
     graphConfiguration.setStoreLocation(
         this.schemaName + '/' + carbonDataLoadSchema.getCarbonTable().getFactTableName());
     graphConfiguration.setBlockletSize(

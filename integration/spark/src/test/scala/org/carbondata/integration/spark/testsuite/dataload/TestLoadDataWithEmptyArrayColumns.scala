@@ -1,8 +1,10 @@
 package org.carbondata.integration.spark.testsuite.dataload
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.common.util.CarbonHiveContext._
 import org.apache.spark.sql.common.util.QueryTest
-import org.apache.spark.sql.Row
+import org.carbondata.core.constants.CarbonCommonConstants
+import org.carbondata.core.util.CarbonProperties
 import org.scalatest.BeforeAndAfterAll
 
 /**
@@ -21,11 +23,16 @@ class TestLoadDataWithEmptyArrayColumns extends QueryTest with BeforeAndAfterAll
   }
 
   test("test carbon table data loading when there are empty array columns in data") {
-    sql(s"""
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.CARBON_TIMESTAMP_FORMAT,
+        CarbonCommonConstants.CARBON_TIMESTAMP_DEFAULT_FORMAT
+      )
+    sql(
+      s"""
             LOAD DATA inpath './src/test/resources/arrayColumnEmpty.csv'
-            into table nest13 options ('DELIMITER'=',', 'complex_delimiter_level_1'='/',
-            'FILEHEADER'= 'imei,age,productdate,gamePointId,reserved6,mobile')
-         """)
+            into table nest13 options ('DELIMITER'=',', 'complex_delimiter_level_1'='/')
+         """
+    )
     checkAnswer(
       sql("""
              SELECT count(*) from nest13
@@ -35,5 +42,7 @@ class TestLoadDataWithEmptyArrayColumns extends QueryTest with BeforeAndAfterAll
 
   override def afterAll {
     sql("drop table nest13")
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.CARBON_TIMESTAMP_FORMAT, "dd-MM-yyyy")
   }
 }

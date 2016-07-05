@@ -20,7 +20,7 @@ package org.carbondata.examples
 import org.apache.spark.sql.{CarbonContext, CarbonEnv, CarbonRelation}
 
 import org.carbondata.core.cache.dictionary.DictionaryColumnUniqueIdentifier
-import org.carbondata.core.carbon.CarbonTableIdentifier
+import org.carbondata.core.carbon.{CarbonTableIdentifier, ColumnIdentifier}
 import org.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension
 import org.carbondata.core.carbon.path.CarbonStorePath
 import org.carbondata.examples.util.InitForExamples
@@ -65,7 +65,7 @@ object GenerateDictionaryExample {
       lookupRelation1(Option(dataBaseName),
         tableName, None) (carbonContext).asInstanceOf[CarbonRelation]
     val carbonTable = carbonRelation.cubeMeta.carbonTable
-    val dimensions = carbonTable.getDimensionByTableName(tableName)
+    val dimensions = carbonTable.getDimensionByTableName(tableName.toLowerCase())
       .toArray.map(_.asInstanceOf[CarbonDimension])
     // scalastyle:off println
     // print dictionary information
@@ -76,7 +76,7 @@ object GenerateDictionaryExample {
       println(s"dictionary of dimension: ${dimension.getColName}")
       println(s"Key\t\t\tValue")
       val columnIdentifier = new DictionaryColumnUniqueIdentifier(carbonTableIdentifier,
-        dimension.getColumnId, dimension.getDataType)
+        dimension.getColumnIdentifier, dimension.getDataType)
       val dict = CarbonLoaderUtil.getDictionary(columnIdentifier, carbonContext.storePath)
       var index: Int = 1
       var distinctValue = dict.getDictionaryValueForKey(index)

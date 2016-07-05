@@ -193,7 +193,10 @@ public class ColumnDictionaryInfo extends AbstractColumnDictionaryInfo {
         int surrogateKey = sortedSurrogates.get(mid);
         byte[] dictionaryValue = getDictionaryBytesFromSurrogate(surrogateKey);
         int cmp = -1;
-        if (this.getDataType() != DataType.STRING) {
+        //fortify fix
+        if (null == dictionaryValue) {
+          cmp = -1;
+        } else if (this.getDataType() != DataType.STRING) {
           cmp = compareFilterKeyWithDictionaryKey(new String(dictionaryValue), filterKey,
               this.getDataType());
 
@@ -224,7 +227,6 @@ public class ColumnDictionaryInfo extends AbstractColumnDictionaryInfo {
     try {
       switch (dataType) {
         case INT:
-
           return Integer.compare((Integer.parseInt(dictionaryVal)), (Integer.parseInt(memberVal)));
         case DOUBLE:
           return Double
@@ -243,7 +245,6 @@ public class ColumnDictionaryInfo extends AbstractColumnDictionaryInfo {
           dateToStr = parser.parse(memberVal);
           dictionaryDate = parser.parse(dictionaryVal);
           return dictionaryDate.compareTo(dateToStr);
-
         case DECIMAL:
           java.math.BigDecimal javaDecValForDictVal = new java.math.BigDecimal(dictionaryVal);
           java.math.BigDecimal javaDecValForMemberVal = new java.math.BigDecimal(memberVal);
@@ -252,6 +253,13 @@ public class ColumnDictionaryInfo extends AbstractColumnDictionaryInfo {
           return -1;
       }
     } catch (Exception e) {
+      //In all data types excluding String data type the null member will be the highest
+      //while doing search in dictioary when the member comparison happens with filter member
+      //which is also null member, since the parsing fails in other data type except string
+      //explicit comparison is required, is both are null member then system has to return 0.
+      if (memberVal.equals(dictionaryVal)) {
+        return 0;
+      }
       return -1;
     }
   }

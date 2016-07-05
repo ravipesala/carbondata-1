@@ -52,14 +52,18 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
   val LOGGER = LogServiceFactory.getLogService("CarbonStrategies")
 
   def getStrategies: Seq[Strategy] = {
-    val total = sqlContext.planner.strategies :+ CarbonTableScans :+ DDLStrategies
+    val total = sqlContext.planner.strategies :+ getCarbonTableScans :+ getDDLStrategies
     total
   }
+
+  def getCarbonTableScans: Strategy = new CarbonTableScans
+
+  def getDDLStrategies: Strategy = new DDLStrategies
 
   /**
    * Carbon strategies for Carbon cube scanning
    */
-  private[sql] object CarbonTableScans extends Strategy {
+  protected[sql] class CarbonTableScans extends Strategy {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, predicates,
@@ -265,7 +269,7 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
     /**
      * Create carbon scan
      */
-    private def carbonScan(projectList: Seq[NamedExpression],
+    protected def carbonScan(projectList: Seq[NamedExpression],
         predicates: Seq[Expression],
         relation: CarbonRelation,
         groupExprs: Option[Seq[Expression]],
@@ -321,7 +325,7 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
     }
   }
 
-  object DDLStrategies extends Strategy {
+  class DDLStrategies extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ShowCubeCommand(schemaName) =>
         ExecutedCommand(ShowAllTablesInSchema(schemaName, plan.output)) :: Nil
@@ -351,11 +355,13 @@ class CarbonStrategies(sqlContext: SQLContext) extends QueryPlanner[SparkPlan] {
         }
       case d: HiveNativeCommand =>
         try {
-          val resolvedTable = sqlContext.executePlan(CarbonHiveSyntax.parse(d.sql)).analyzed
+          val resolvedTable = sqlContext.executePlan(CarbonHiveSyntax.parse(d.sql)).optimizedPlan
           planLater(resolvedTable) :: Nil
         } catch {
           case ce: MalformedCarbonCommandException =>
             throw ce
+          case ae: AnalysisException =>
+            throw ae
           case e: Exception => ExecutedCommand(d) :: Nil
         }
       case DescribeFormattedCommand(sql, tblIdentifier) =>

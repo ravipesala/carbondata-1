@@ -28,7 +28,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 import org.carbondata.core.cache.{Cache, CacheProvider, CacheType}
 import org.carbondata.core.cache.dictionary.{Dictionary, DictionaryColumnUniqueIdentifier}
-import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier}
+import org.carbondata.core.carbon.{AbsoluteTableIdentifier, CarbonTableIdentifier, ColumnIdentifier}
 import org.carbondata.core.carbon.metadata.datatype.DataType
 import org.carbondata.core.carbon.metadata.encoder.Encoding
 import org.carbondata.query.carbon.util.DataTypeUtil
@@ -90,7 +90,7 @@ case class CarbonDictionaryDecoder(
 
   val getDictionaryColumnIds = {
     val attributes = child.output
-    val dictIds: Array[(String, String, DataType)] = attributes.map { a =>
+    val dictIds: Array[(String, ColumnIdentifier, DataType)] = attributes.map { a =>
       val attr = aliasMap.getOrElse(a, a)
       val relation = relations.find(p => p.contains(attr))
       if(relation.isDefined) {
@@ -101,7 +101,8 @@ case class CarbonDictionaryDecoder(
             carbonDimension.hasEncoding(Encoding.DICTIONARY) &&
             !carbonDimension.hasEncoding(Encoding.DIRECT_DICTIONARY) &&
             canBeDecoded(attr)) {
-          (carbonTable.getFactTableName, carbonDimension.getColumnId, carbonDimension.getDataType)
+          (carbonTable.getFactTableName, carbonDimension.getColumnIdentifier,
+              carbonDimension.getDataType)
         } else {
           (null, null, null)
         }
