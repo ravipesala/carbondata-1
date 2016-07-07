@@ -23,6 +23,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.carbondata.core.iterator.CarbonIterator;
 import org.carbondata.query.carbon.executor.exception.QueryExecutionException;
@@ -58,37 +59,33 @@ public class DetailRawQueryResultIterator extends AbstractDetailQueryResultItera
 
   @Override public BatchResult next() {
     BatchResult result;
-    if (future == null) {
-      future = execute();
+    try {
+      if (future == null) {
+        future = execute();
+      }
+      ResultInfo resultFromFuture = future.get();
+      result = resultFromFuture.result;
+      currentCounter += resultFromFuture.counter;
+      if (hasNext()) {
+        future = execute();
+      } else {
+        execService.shutdown();
+        execService.awaitTermination(2, TimeUnit.HOURS);
+      }
+      return result;
+    } catch (Exception e) {
+      execService.shutdown();
+      throw new RuntimeException(e.getCause());
     }
-    ResultInfo resultFromFuture = getResultFromFuture(future);
-    result = resultFromFuture.result;
-    currentCounter += resultFromFuture.counter;
-    if (hasNext()) {
-      future = execute();
-    }
-    return result;
   }
 
-  private ResultInfo getResultFromFuture(Future<ResultInfo> future) {
-    try {
-      return future.get();
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
-    return new ResultInfo();
-  }
 
   private Future<ResultInfo> execute() {
     return execService.submit(new Callable<ResultInfo>() {
-      @Override public ResultInfo call() {
-        CarbonIterator<Result> result = null;
+      @Override public ResultInfo call() throws QueryExecutionException {
         int counter =  updateSliceIndexToBeExecuted();
-        try {
-          result = executor.executeQuery(blockExecutionInfos, blockIndexToBeExecuted);
-        } catch (QueryExecutionException ex) {
-          throw new RuntimeException(ex.getCause());
-        }
+        CarbonIterator<Result> result =
+            executor.executeQuery(blockExecutionInfos, blockIndexToBeExecuted);
         for (int i = 0; i < blockIndexToBeExecuted.length; i++) {
           if (blockIndexToBeExecuted[i] != -1) {
             blockExecutionInfos.get(blockIndexToBeExecuted[i]).setFirstDataBlock(
