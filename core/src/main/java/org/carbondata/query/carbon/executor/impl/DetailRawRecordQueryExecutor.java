@@ -19,7 +19,7 @@ public class DetailRawRecordQueryExecutor extends AbstractQueryExecutor<BatchRes
   @Override public CarbonIterator<BatchResult> execute(QueryModel queryModel)
       throws QueryExecutionException {
     List<BlockExecutionInfo> blockExecutionInfoList = getBlockExecutionInfos(queryModel);
-    InternalQueryExecutor queryExecutor = new InternalDetailQueryExecutor();
+    InternalQueryExecutor queryExecutor = new InternalDetailQueryExecutor(queryModel);
     return new DetailRawQueryResultIterator(blockExecutionInfoList, queryProperties, queryModel,
         queryExecutor);
   }
